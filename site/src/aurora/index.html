@@ -9,7 +9,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Aurora · swirlseed labs</title>
-<meta name="description" content="Northern lights over a starry sky, generated from a seed string.">
+<meta name="description" content="Folded northern-lights curtains over a starry sky, generated from a seed string.">
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <style>
 :root{--ink:#14151a;--page:#eeeef0}
@@ -121,40 +121,81 @@ function startLab(CFG){
   window.__lab={state,renderTo};
   sync();draw();strips();
 }
+// cold-press paper: height field (0..1) and a lit version for emboss shading
+function paperHeight(W,H,S,scale){const h=new Float32Array(W*H),m=Math.min(W,H)/ (scale||1);
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const u=x/m,v=y/m;h[y*W+x]=.5*fbm2(u*26,v*26,S+101,3)+.3*fbm2(u*70,v*70,S+102,2)+.2*hash2(x,y,S+103)}return h}
+function paperLight(h,W,H,k){const L=new Float32Array(W*H);for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x,xm=x>0?h[i-1]:h[i],ym=y>0?h[i-W]:h[i];L[i]=1+((h[i]-xm)*.7+(h[i]-ym)*.7)*k}return L}
+function boxBlur(a,W,H,r){if(r<1)return a;const t=new Float32Array(W*H),o=new Float32Array(W*H),n=2*r+1;
+  for(let y=0;y<H;y++){let s=0;const row=y*W;for(let x=-r;x<=r;x++)s+=a[row+clamp(x,0,W-1)];for(let x=0;x<W;x++){t[row+x]=s/n;s+=a[row+Math.min(W-1,x+r+1)]-a[row+Math.max(0,x-r)]}}
+  for(let x=0;x<W;x++){let s=0;for(let y=-r;y<=r;y++)s+=t[clamp(y,0,H-1)*W+x];for(let y=0;y<H;y++){o[y*W+x]=s/n;s+=t[Math.min(H-1,y+r+1)*W+x]-t[Math.max(0,y-r)*W+x]}}return o}
+// one layer of transparent pigment: A = water/pigment coverage (0..1); adds absorbance into Ab (rgb interleaved)
+function pigmentLayer(Ab,A,W,H,pig,o){
+  const m=Math.min(W,H),S=o.S|0,k=pig.map(c=>-Math.log(clamp(c,.02,.999))),Ab1=boxBlur(boxBlur(A,W,H,Math.max(1,Math.round(m*(o.edgeR||.006)))),W,H,Math.max(1,Math.round(m*(o.edgeR||.006))));
+  const fq=o.mottleF||3;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x,a=A[i];if(a<.003)continue;
+    const u=x/m,v=y/m,edge=Math.max(0,a-Ab1[i]),mot=.8+.4*fbm2(u*fq+S*.001,v*fq,S+11,4);
+    let D=a*mot+edge*(o.edge||2.4);
+    if(o.bloom){const n=fbm2(u*(o.bloomF||5),v*(o.bloomF||5),S+21,5),t=o.bloomT||.58,b=sstep(t,t+.015,n);D*=1-.3*b*a;D+=a*.55*o.bloom*Math.exp(-Math.pow((n-t)/.007,2))}
+    const g=o.ph?(1-(o.gran||.5)+(o.gran||.5)*2*o.ph[i]*(.6+.4*fbm2(u*40,v*40,S+31,2))):1;D*=g*(o.strength||1);
+    Ab[i*3]+=D*k[0];Ab[i*3+1]+=D*k[1];Ab[i*3+2]+=D*k[2]}}
+function developPaper(ctx,Ab,W,H,paper,ph,pl){const img=ctx.createImageData(W,H),d=img.data;
+  for(let i=0;i<W*H;i++){const l=pl?pl[i]:1,o=i*4;d[o]=enc(paper[0]*Math.exp(-Ab[i*3])*l);d[o+1]=enc(paper[1]*Math.exp(-Ab[i*3+1])*l);d[o+2]=enc(paper[2]*Math.exp(-Ab[i*3+2])*l);d[o+3]=255}
+  ctx.putImageData(img,0,0)}
+// emission colours (linear) by height inside the curtain: lower fringe, body, top
 const COL={
-  Green:{lo:[.15,1,.45],hi:[.1,.55,.85],tip:[.55,.2,.7]},
-  Violet:{lo:[1,.25,.8],hi:[.45,.3,1],tip:[.2,.5,1]},
-  Crimson:{lo:[1,.18,.22],hi:[.7,.1,.45],tip:[.35,.1,.5]},
-  Mixed:{lo:[.2,1,.55],hi:[.8,.3,.9],tip:[1,.25,.4]}};
+  Green:{fr:[.5,.9,.6],lo:[.12,1,.38],hi:[.08,.55,.42],top:[.55,.12,.35]},
+  Violet:{fr:[.9,.5,1],lo:[.55,.3,1],hi:[.3,.35,1],top:[.25,.15,.7]},
+  Crimson:{fr:[1,.5,.5],lo:[1,.16,.24],hi:[.8,.12,.4],top:[.4,.08,.4]},
+  Mixed:{fr:[1,.3,.7],lo:[.15,1,.45],hi:[.1,.7,.5],top:[.9,.15,.35]}};
 function render(cv,P,W,H){
-  const ctx=cv.getContext("2d"),img=ctx.createImageData(W,H),d=img.data,R=rngFor(P.seed,"aur"),S=(R()*1e6)|0,C=COL[P.colour],nc=Math.round(P.curtains);
-  const cur=[];for(let c=0;c<nc;c++)cur.push({y:.24+.14*c+(R()-.5)*.1,f:1.2+R()*1.4,ph:R()*50,amp:.1+.12*R(),sh:(R()-.5)*.25,i:.65+.5*R(),hf:.28+.16*R()});
-  const stars=[];const ns=Math.round(P.stars*W*H/1300);
-  const sb=new Float32Array(W*H);
-  for(let s=0;s<ns;s++){const x=(R()*W)|0,y=(R()*H*.95)|0,b=Math.pow(R(),3.2);sb[y*W+x]=Math.max(sb[y*W+x],.25+b*.75)}
-  const rf=P.rays/ (W/H);
-  for(let y=0;y<H;y++){const v=y/H;
-    const sr=.004+.012*Math.pow(v,2.2),sg=.007+.022*Math.pow(v,1.8),sbl=.02+.05*Math.pow(v,1.5);
-    for(let x=0;x<W;x++){const u=x/W;let r=sr,g=sg,b=sbl;
-      for(let c=0;c<nc;c++){const k=cur[c];
-        const base=k.y+(fbm2(u*k.f+k.ph,k.ph*.3,S+c,4)-.5)*k.amp*2.4;
-        const h=(base-v)/k.hf; if(h<=-.15)continue;
-        const ux=u+h*k.sh*.5;
-        const ray=Math.pow(.25+.75*fbm2(ux*rf+k.ph,0.5+c,S+31*c,2),1.6)*(.6+.8*vnoise(ux*rf*.23,k.ph,S+5));
-        const patch=.45+.9*fbm2(u*3.2+k.ph,v*.8+7,S+77+c,3);
-        const low=sstep(-.15,.06,h)*(h>0?Math.exp(-Math.pow(h,1.15)*2.4):Math.exp(h*18));
-        const I=low*ray*patch*k.i*P.intensity*.95;
-        const ht=clamp(h*1.1,0,1),tp=sstep(.55,1.1,h);
-        const cr=lerp(C.lo[0],C.hi[0],ht)*(1-tp)+C.tip[0]*tp,cg=lerp(C.lo[1],C.hi[1],ht)*(1-tp)+C.tip[1]*tp,cb=lerp(C.lo[2],C.hi[2],ht)*(1-tp)+C.tip[2]*tp;
-        r+=cr*I;g+=cg*I;b+=cb*I}
-      const st=sb[y*W+x];if(st){const hide=1-clamp((r+g+b)*2.5,0,1);r+=st*hide;g+=st*hide;b+=st*.95*hide}
-      const i=(y*W+x)*4;
-      d[i]=enc(1-Math.exp(-r*1.25));d[i+1]=enc(1-Math.exp(-g*1.25));d[i+2]=enc(1-Math.exp(-b*1.25));d[i+3]=255}}
+  const ctx=cv.getContext("2d"),img=ctx.createImageData(W,H),d=img.data,R=rngFor(P.seed,"aur2"),S=(R()*1e6)|0,C=COL[P.colour],nc=Math.round(P.curtains);
+  const N=W*H,Er=new Float32Array(N),Eg=new Float32Array(N),Eb=new Float32Array(N);
+  // camera on the ground looking up toward the horizon; curtains are vertical sheets 100-300 km up
+  const f=H*.85,hor=H*1.04,cx=W/2;
+  for(let c=0;c<nc;c++){
+    const off=R()*50,Zc=c===0?110+R()*90:220+R()*500,phi0=(R()-.5)*.8,bend=1.6+1.8*R(),len=Zc*(3.2+1.6*R()),M=Math.round(W*14);
+    const top=70+120*R(),curl=6+10*R(),near=320/Zc;
+    const XA=new Float32Array(M),ZA=new Float32Array(M);{let X=0,Z=Zc,sx=0;
+      for(let k=0;k<M;k++){const ph=phi0+bend*(fbm2(k/M*2.2+off,c,S+c,3)-.5)*2;X+=Math.cos(ph)*len/M;Z+=Math.sin(ph)*len/M*.6;XA[k]=X;ZA[k]=Math.max(Z,30);if(Z>=100)sx+=X/Z;else sx+=0}
+      const c0=sx/M-(R()-.5)*.35;for(let k=0;k<M;k++)XA[k]-=c0*ZA[k]}
+    for(let k=0;k<M;k++){const s=k/M,X=XA[k],Z=ZA[k];if(Z<100)continue;
+      // small curls fold the sheet back on itself; edge-on parts pile up into bright rays
+      const Xc=X+curl*(fbm2(s*38+off,c+3,S+c+5,3)-.5)*2*(.4+fbm2(s*4+off,c,S+c+6,2)),x=cx+Xc/Z*f;
+      if(x<-2||x>=W+1)continue;
+      const a0=100+8*(fbm2(s*9+off,c+1,S+c+7,2)-.5),a1=a0+top*(.45+.9*fbm2(s*6+off,c+2,S+c+8,3))*(.7+.6*vnoise(s*P.rays*3+off,c,S+c+9));
+      const yb=hor-a0*f/Z,h=(a1-a0)*f/Z;
+      const ray=Math.pow(clamp(vnoise(s*P.rays*4+off,c,S+c+60)*.6+vnoise(s*P.rays*13+off,c+.5,S+c+61)*.4,0,1),2.4);
+      const act=Math.pow(clamp(fbm2(s*3.2+off,c+7,S+c+80,4)*2-.35,0,1),1.1)*sstep(0,.08,s)*sstep(1,.92,s);
+      const ext=Math.exp(-Math.max(0,Z-300)/1400);
+      const I=(.12+2*ray)*act*P.intensity*ext*(len/M)/Z*f*.3*(near>1?1:.75+.25*near);
+      if(I<1e-6)continue;
+      const xi=Math.floor(x),fx=x-xi,y0=Math.max(0,Math.floor(yb-h*1.7)),y1=Math.min(H-1,Math.ceil(yb+3));
+      for(let y=y0;y<=y1;y++){const z=(yb-y)/h;let e;
+        if(z<0)e=Math.exp(z*h*.8);else e=(Math.exp(-z*2.6)*.85+.15*Math.exp(-z*.7))*(1-Math.exp(-z*h*.45-.3))*(1+.9*Math.exp(-z*h*.1))*(1-sstep(.45,1.65,z));
+        if(e<.003)continue;
+        const tl=clamp(z/.7,0,1),fr=Math.exp(-Math.max(0,z)*h*.3)*.55,tp=sstep(.35,1,z);
+        let r=lerp(C.lo[0],C.hi[0],tl),g=lerp(C.lo[1],C.hi[1],tl),b=lerp(C.lo[2],C.hi[2],tl);r=lerp(r,C.top[0],tp);g=lerp(g,C.top[1],tp);b=lerp(b,C.top[2],tp);
+        r=lerp(r,C.fr[0],fr*.5);g=lerp(g,C.fr[1],fr*.5);b=lerp(b,C.fr[2],fr*.5);
+        const w=e*I,i0=y*W+xi;
+        if(xi>=0&&xi<W){Er[i0]+=r*w*(1-fx);Eg[i0]+=g*w*(1-fx);Eb[i0]+=b*w*(1-fx)}
+        if(xi+1<W&&xi+1>=0){Er[i0+1]+=r*w*fx;Eg[i0+1]+=g*w*fx;Eb[i0+1]+=b*w*fx}}}}
+  // optics: slight softness plus a wide glow scattered in the atmosphere
+  const sm=Math.max(1,Math.round(W/700)),gl=Math.round(W/40);
+  const Ar=boxBlur(Er,W,H,sm),Ag=boxBlur(Eg,W,H,sm),Ab=boxBlur(Eb,W,H,sm),Gr=boxBlur(boxBlur(Er,W,H,gl),W,H,gl),Gg=boxBlur(boxBlur(Eg,W,H,gl),W,H,gl),Gb=boxBlur(boxBlur(Eb,W,H,gl),W,H,gl);
+  // stars, dimmed toward the hazy horizon
+  const st=new Float32Array(N),ns=Math.round(P.stars*N/700);for(let s=0;s<ns;s++){const x=(R()*W)|0,y=(R()*H)|0,b=Math.pow(R(),4.5)*1.6+.05;st[y*W+x]+=b*(1-sstep(.6,1,y/H)*.8)}
+  const stB=boxBlur(st,W,H,1);
+  for(let y=0;y<H;y++){const v=y/H;for(let x=0;x<W;x++){const i=y*W+x;
+    // night sky: deep navy above, faint airglow and light pollution at the horizon
+    let r=.003+.006*Math.pow(v,3),g=.005+.01*Math.pow(v,2.6),b=.014+.022*Math.pow(v,2.2);
+    const s=st[i]*.85+stB[i]*.6;r+=s;g+=s;b+=s*1.05;
+    r+=Ar[i]+Gr[i]*.35;g+=Ag[i]+Gg[i]*.35;b+=Ab[i]+Gb[i]*.35;
+    const n=(hash2(x,y,S)-.5)*.004,o=i*4,tm=c=>enc(1-Math.exp(-(c+n)*1.4));d[o]=tm(r);d[o+1]=tm(g);d[o+2]=tm(b);d[o+3]=255}}
   ctx.putImageData(img,0,0);return P.colour+" · "+nc+" curtain"+(nc>1?"s":"")}
 const CL=[["Green","Green"],["Violet","Violet"],["Crimson","Crimson"],["Mixed","Mixed"]];
-const CFG={id:"aurora",title:"Aurora",lead:"Northern lights above a starry night: curtains of light with sharp glowing lower edges, vertical rays and fading tops, added together like real light. The seed shapes the curtains and scatters the stars.",
+const CFG={id:"aurora",title:"Aurora",lead:"Northern lights over a starry night. Each curtain is a thin glowing sheet that folds back on itself: where you see it edge-on it burns brighter, which is where the rays and folds come from. Green low down, red and violet at the top, a pink fringe on the lower edge, with a soft halo scattered through the air.",
   mainW:1000,thumbW:320,aspect:1.6,render,
-  sliders:[{k:"intensity",label:"Intensity",min:.4,max:1.6,step:.02,v:1,fmt:v=>Math.round(v*100)+"%"},{k:"curtains",label:"Curtains",min:1,max:3,step:1,v:2},{k:"rays",label:"Rays",min:20,max:140,step:1,v:70},{k:"stars",label:"Stars",min:0,max:1,step:.01,v:.7,fmt:v=>Math.round(v*100)+"%"}],
+  sliders:[{k:"intensity",label:"Intensity",min:.4,max:2,step:.02,v:1,fmt:v=>Math.round(v*100)+"%"},{k:"curtains",label:"Curtains",min:1,max:3,step:1,v:2},{k:"rays",label:"Rays",min:20,max:140,step:1,v:70},{k:"stars",label:"Stars",min:0,max:1,step:.01,v:.7,fmt:v=>Math.round(v*100)+"%"}],
   segs:[{k:"colour",label:"Colour",v:"Green",opts:CL}],
   strips:[{title:"Colour",sub:"Oxygen green, violet, crimson, and a mixed display.",k:"colour",opts:CL},
           {title:"Curtains",sub:"One lone arc up to a layered sky.",k:"curtains",opts:[["1",1],["2",2],["3",3]]}]};
