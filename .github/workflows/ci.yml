@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy -p swirlseed --all-targets -- -D warnings
+      - run: cargo build --workspace --release
+      - run: cargo test --workspace
+      # the library also has to work (and match the golden hashes) without the NFC dependency
+      - run: cargo test -p swirlseed --no-default-features
+
+  typescript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - working-directory: packages/swirlseed
+        run: |
+          npm install --no-audit --no-fund
+          npm test
+
+  # Regenerating the golden file from TypeScript must not change it: otherwise the algorithm was
+  # modified without updating testdata/golden.txt (which the Rust tests compare against).
+  golden-is-current:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - working-directory: packages/swirlseed
+        run: |
+          npm install --no-audit --no-fund
+          npm run golden
+      - run: git diff --exit-code -- testdata/golden.txt
