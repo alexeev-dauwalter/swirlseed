@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<!--
+  Planets & nebulae — a swirlseed labs demo (standalone, not part of the byte-exact library).
+  Author: Peter Alexeev Dauwalter <alexeev.dauwalter@41t.org>
+  Year: 2026
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Planets & nebulae · swirlseed labs</title>
+<meta name="description" content="Shaded planets, rings and nebulae generated from a seed string.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<style>
+:root{--ink:#14151a;--page:#eeeef0}
+*{box-sizing:border-box;margin:0}
+body{min-height:100vh;font:15px/1.4 ui-sans-serif,-apple-system,"SF Pro Display","Inter",system-ui,sans-serif;color:var(--ink);background:radial-gradient(circle,rgba(20,20,40,.13) 1px,transparent 1.6px) 0 0/22px 22px,var(--page);padding:44px 28px 36px;-webkit-font-smoothing:antialiased;overflow-x:clip}
+.wrap{max-width:1120px;margin:0 auto}
+.back{display:inline-block;margin-bottom:14px;color:#6b6a78;text-decoration:none;font-size:14px}.back:hover{color:var(--ink)}
+h1{font-size:30px;letter-spacing:-.03em;font-weight:650}
+.lead{color:#6b6a78;margin:6px 0 24px;max-width:660px}
+.frame{border-radius:28px;overflow:hidden;background:#ddd;line-height:0;box-shadow:0 30px 50px -24px rgba(30,20,70,.55),0 3px 8px rgba(30,20,70,.2);position:relative}
+.frame canvas{width:100%;height:auto;display:block}
+.badge{position:absolute;left:16px;top:14px;line-height:1.2;color:#fff;font-size:13px;padding:7px 12px;border-radius:999px;background:rgba(10,12,24,.42);border:1px solid rgba(255,255,255,.25);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.panel{margin-top:18px;background:rgba(255,255,255,.78);border:1px solid #fff;border-radius:26px;padding:20px 22px;box-shadow:0 20px 40px -24px rgba(30,20,70,.4);display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 34px}
+.field{margin:6px 0 12px}
+.lab{display:block;font-size:12px;font-weight:600;color:#55546a;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em}
+.field input[type=text]{width:100%;font:inherit;padding:10px 14px;border-radius:14px;border:1px solid #dcdbe6;background:#fff;outline:0}
+.field input[type=text]:focus{border-color:var(--ink)}
+.row{display:grid;grid-template-columns:86px 1fr 56px;align-items:center;gap:10px;font-size:13.5px;margin:10px 0}
+.row output{text-align:right;font-variant-numeric:tabular-nums;color:#55546a;font-size:12.5px}
+input[type=range]{width:100%;accent-color:#14151a}
+.seg{display:flex;flex-wrap:wrap;gap:4px;background:#e6e5ee;border-radius:12px;padding:3px}
+.seg button{flex:1 0 auto;border:0;background:transparent;font:inherit;font-size:13px;padding:7px 9px;border-radius:9px;cursor:pointer;color:#33323f}
+.seg button.on{background:#fff;box-shadow:0 2px 6px rgba(30,20,70,.18);font-weight:600}
+.btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;grid-column:1/-1}
+.btn{border:1px solid #fff;background:#fff;color:var(--ink);font:inherit;font-size:14px;padding:9px 18px;border-radius:999px;cursor:pointer;box-shadow:0 4px 12px -6px rgba(40,30,90,.4)}
+.btn.dark{background:var(--ink);color:#fff;border-color:var(--ink)}
+.btn:disabled{opacity:.5;cursor:default}
+h2{font-size:20px;letter-spacing:-.02em;margin:34px 0 4px}
+.sub{color:#6b6a78;font-size:13.5px;margin-bottom:12px}
+.strip{display:grid;gap:12px;grid-template-columns:repeat(var(--n,5),minmax(0,1fr))}
+.th{position:relative;border-radius:18px;overflow:hidden;line-height:0;cursor:pointer;background:#ddd;box-shadow:0 14px 24px -14px rgba(30,20,70,.5);transition:transform .25s}
+.th:hover{transform:translateY(-3px)}.th.on{outline:2px solid var(--ink);outline-offset:2px}
+.th canvas{width:100%;height:auto;display:block}
+.th span{position:absolute;left:8px;bottom:8px;line-height:1.1;font-size:11.5px;color:#fff;padding:4px 9px;border-radius:999px;background:rgba(10,12,24,.45);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.note{margin-top:34px;color:#6b6a78;font-size:13.5px;max-width:720px}
+footer{margin-top:40px;color:#7a7888;font-size:13px}
+@media(max-width:760px){.panel{grid-template-columns:minmax(0,1fr)}.strip{grid-template-columns:repeat(2,minmax(0,1fr))}body{padding:28px 16px}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+"use strict";
+const clamp=(x,a,b)=>x<a?a:x>b?b:x,lerp=(a,b,t)=>a+(b-a)*t,sstep=(a,b,x)=>{const t=clamp((x-a)/(b-a),0,1);return t*t*(3-2*t)};
+const TAU=Math.PI*2;
+function cyrb128(str){let h1=1779033703,h2=3144134277,h3=1013904242,h4=2773480762;for(let i=0,k;i<str.length;i++){k=str.charCodeAt(i);h1=h2^Math.imul(h1^k,597399067);h2=h3^Math.imul(h2^k,2869860233);h3=h4^Math.imul(h3^k,951274213);h4=h1^Math.imul(h4^k,2716044179)}
+  h1=Math.imul(h3^(h1>>>18),597399067);h2=Math.imul(h4^(h2>>>22),2869860233);h3=Math.imul(h1^(h3>>>17),951274213);h4=Math.imul(h2^(h4>>>19),2716044179);return[(h1^h2^h3^h4)>>>0,(h2^h1)>>>0,(h3^h1)>>>0,(h4^h1)>>>0]}
+function sfc32(a,b,c,d){return function(){a>>>=0;b>>>=0;c>>>=0;d>>>=0;let t=(a+b)|0;a=b^(b>>>9);b=(c+(c<<3))|0;c=(c<<21|c>>>11);d=(d+1)|0;t=(t+d)|0;c=(c+t)|0;return(t>>>0)/4294967296}}
+function rngFor(seed,salt){const h=cyrb128(salt+"\u0000"+seed.normalize("NFC"));const r=sfc32(h[0],h[1],h[2],h[3]);for(let i=0;i<15;i++)r();return r}
+function hash2(x,y,s){let h=Math.imul(x|0,374761393)+Math.imul(y|0,668265263)+Math.imul(s|0,1274126177);h=Math.imul(h^(h>>>13),1274126177);h^=h>>>16;return(h>>>0)/4294967296}
+function hash3(x,y,z,s){let h=Math.imul(x|0,374761393)+Math.imul(y|0,668265263)+Math.imul(z|0,1440662683)+Math.imul(s|0,1274126177);h=Math.imul(h^(h>>>13),1274126177);h^=h>>>16;return(h>>>0)/4294967296}
+function vnoise(x,y,s){const xi=Math.floor(x),yi=Math.floor(y),xf=x-xi,yf=y-yi,u=xf*xf*(3-2*xf),v=yf*yf*(3-2*yf);
+  const a=hash2(xi,yi,s),b=hash2(xi+1,yi,s),c=hash2(xi,yi+1,s),d=hash2(xi+1,yi+1,s);return a+(b-a)*u+(c-a)*v+(a-b-c+d)*u*v}
+function fbm2(x,y,s,o){let t=0,a=.5,n=0;for(let i=0;i<o;i++){t+=a*vnoise(x,y,s+i*31);n+=a;a*=.5;const nx=(x*.8+y*.6)*2.03+11.7,ny=(-x*.6+y*.8)*2.03+5.3;x=nx;y=ny}return t/n}
+function vnoise3(x,y,z,s){const xi=Math.floor(x),yi=Math.floor(y),zi=Math.floor(z),xf=x-xi,yf=y-yi,zf=z-zi,u=xf*xf*(3-2*xf),v=yf*yf*(3-2*yf),w=zf*zf*(3-2*zf);
+  const a=hash3(xi,yi,zi,s),b=hash3(xi+1,yi,zi,s),c=hash3(xi,yi+1,zi,s),d=hash3(xi+1,yi+1,zi,s),e=hash3(xi,yi,zi+1,s),f=hash3(xi+1,yi,zi+1,s),g=hash3(xi,yi+1,zi+1,s),h=hash3(xi+1,yi+1,zi+1,s);
+  const x1=a+(b-a)*u,x2=c+(d-c)*u,x3=e+(f-e)*u,x4=g+(h-g)*u,y1=x1+(x2-x1)*v,y2=x3+(x4-x3)*v;return y1+(y2-y1)*w}
+function fbm3(x,y,z,s,o){let t=0,a=.5,n=0;for(let i=0;i<o;i++){t+=a*vnoise3(x,y,z,s+i*31);n+=a;a*=.5;const nx=y*2.03+17.1,ny=z*2.03+3.7,nz=x*2.03+9.3;x=nx;y=ny;z=nz}return t/n}
+// OKLCH -> sRGB (0..255), gamut fitted by reducing chroma
+function oklab2lin(L,a,b){const l_=L+0.3963377774*a+0.2158037573*b,m_=L-0.1055613458*a-0.0638541728*b,s_=L-0.0894841775*a-1.2914855480*b,l=l_*l_*l_,m=m_*m_*m_,s=s_*s_*s_;
+  return[4.0767416621*l-3.3077115913*m+0.2309699292*s,-1.2684380046*l+2.6097574011*m-0.3413193965*s,-0.0041960863*l-0.7034186147*m+1.7076147010*s]}
+const enc=v=>{v=v<=0?0:v>=1?1:v;return 255*(v<=0.0031308?12.92*v:1.055*Math.pow(v,1/2.4)-0.055)};
+function oklchFit(L,C,h){const hr=h*Math.PI/180;let c=C;for(let i=0;i<14;i++){const l=oklab2lin(L,c*Math.cos(hr),c*Math.sin(hr));if(l[0]>=-.001&&l[0]<=1.001&&l[1]>=-.001&&l[1]<=1.001&&l[2]>=-.001&&l[2]<=1.001)break;c*=.88}return[L,c*Math.cos(hr),c*Math.sin(hr)]}
+function oklch(L,C,h){const q=oklchFit(L,C,h),l=oklab2lin(q[0],q[1],q[2]);return[enc(l[0]),enc(l[1]),enc(l[2])]}
+const css=c=>"rgb("+(c[0]|0)+","+(c[1]|0)+","+(c[2]|0)+")";
+function paperTexture(W,H,seed,strength){
+  const c=document.createElement("canvas");c.width=W;c.height=H;const ctx=c.getContext("2d"),img=ctx.createImageData(W,H),d=img.data,s=(cyrb128(seed)[0]%9973)|0,sc=600/Math.max(W,H);
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const cl=fbm2(x*sc*0.012,y*sc*0.012,s,4),g=hash2(x,y,s+7)-0.5,v=255*(1-strength*(0.05*cl+0.035*g+0.02)),i=(y*W+x)*4;d[i]=v;d[i+1]=v*0.995;d[i+2]=v*0.985;d[i+3]=255}
+  ctx.putImageData(img,0,0);const r=rngFor(seed,"fibres");ctx.lineCap="round";const n=Math.round(W*H/2600*strength);
+  for(let i=0;i<n;i++){const x=r()*W,y=r()*H,a=r()*TAU,l=(6+r()*26)*W/1000,cv=(r()-.5)*l*.6;ctx.strokeStyle=r()<.5?"rgba(120,100,70,0.10)":"rgba(255,255,255,0.35)";ctx.lineWidth=(0.4+r()*0.7)*W/1000;
+    ctx.beginPath();ctx.moveTo(x,y);ctx.quadraticCurveTo(x+Math.cos(a)*l/2-Math.sin(a)*cv,y+Math.sin(a)*l/2+Math.cos(a)*cv,x+Math.cos(a)*l,y+Math.sin(a)*l);ctx.stroke()}
+  return c}
+
+// ---------- generic lab page ----------
+function startLab(CFG){
+  const $=s=>document.querySelector(s),app=$("#app");
+  const state={seed:"Hello, world!",aspect:CFG.aspect||1.5};
+  CFG.sliders.forEach(s=>state[s.k]=s.v);CFG.segs.forEach(s=>state[s.k]=s.v);
+  const ASP=[["3:2",1.5],["1:1",1],["2:3",2/3],["16:9",16/9]];
+  app.innerHTML=`<div class="wrap"><a class="back" href="../">← swirlseed</a><h1>${CFG.title}</h1><p class="lead">${CFG.lead}</p>
+  <div class="frame"><canvas id="main"></canvas><div class="badge" id="badge"></div></div>
+  <div class="panel"><div><div class="field"><label class="lab" for="seed">Seed</label><input type="text" id="seed" spellcheck="false" autocomplete="off"></div>
+  ${CFG.sliders.map(s=>`<div class="row"><span>${s.label}</span><input type="range" id="r_${s.k}" min="${s.min}" max="${s.max}" step="${s.step}"><output id="o_${s.k}"></output></div>`).join("")}</div>
+  <div>${CFG.segs.map(s=>`<div class="field"><span class="lab">${s.label}</span><div class="seg" id="g_${s.k}"></div></div>`).join("")}<div class="field"><span class="lab">Aspect</span><div class="seg" id="g_aspect"></div></div></div>
+  <div class="btns"><button class="btn dark" id="dice">Random seed</button><button class="btn" id="dl">Download PNG</button></div></div>
+  ${CFG.strips.map((t,i)=>`<h2>${t.title}</h2><p class="sub">${t.sub}</p><div class="strip" id="s_${i}" style="--n:${t.opts.length}"></div>`).join("")}
+  <footer>© 2026 Peter Alexeev Dauwalter · swirlseed labs</footer></div>`;
+  const mainC=$("#main");
+  function renderTo(cv,P,W){const H=Math.round(W/P.aspect);cv.width=W;cv.height=H;const t=performance.now(),info=CFG.render(cv,P,W,H)||"";return{ms:performance.now()-t,info}}
+  function draw(){const r=renderTo(mainC,state,CFG.mainW||1080);$("#badge").textContent=(r.info?r.info+" · ":"")+Math.round(r.ms)+" ms"}
+  let tok=0,timer=0;
+  function strips(){const my=++tok,jobs=[];
+    CFG.strips.forEach((t,i)=>{const el=$("#s_"+i);el.innerHTML="";t.opts.forEach(o=>{const d=document.createElement("div");d.className="th";const c=document.createElement("canvas"),sp=document.createElement("span");sp.textContent=o[0];d.append(c,sp);
+      d.onclick=()=>{state[t.k]=o[1];sync();schedule();scrollTo({top:0,behavior:"smooth"})};el.appendChild(d);
+      jobs.push(()=>{const P=Object.assign({},state);P[t.k]=o[1];renderTo(c,P,CFG.thumbW||340);d.classList.toggle("on",state[t.k]===o[1])})})});
+    let i=0;(function step(){if(my!==tok||i>=jobs.length)return;jobs[i++]();setTimeout(step,0)})()}
+  function schedule(){$("#badge").textContent="Rendering…";clearTimeout(timer);timer=setTimeout(()=>{draw();strips()},60)}
+  const later=()=>{clearTimeout(timer);timer=setTimeout(schedule,260)};
+  CFG.segs.forEach(s=>{const el=$("#g_"+s.k);s.opts.forEach(o=>{const b=document.createElement("button");b.textContent=o[0];b.dataset.v=o[1];b.onclick=()=>{state[s.k]=o[1];sync();schedule()};el.appendChild(b)})});
+  ASP.forEach(a=>{const b=document.createElement("button");b.textContent=a[0];b.dataset.v=a[1];b.onclick=()=>{state.aspect=a[1];sync();schedule()};$("#g_aspect").appendChild(b)});
+  function sync(){$("#seed").value=state.seed;
+    CFG.sliders.forEach(s=>{$("#r_"+s.k).value=state[s.k];$("#o_"+s.k).textContent=s.fmt?s.fmt(state[s.k]):state[s.k]});
+    [...CFG.segs.map(s=>s.k),"aspect"].forEach(k=>[...$("#g_"+k).children].forEach(b=>b.classList.toggle("on",String(state[k])===b.dataset.v)))}
+  $("#seed").addEventListener("input",e=>{state.seed=e.target.value;later()});
+  CFG.sliders.forEach(s=>$("#r_"+s.k).addEventListener("input",e=>{state[s.k]=+e.target.value;sync();later()}));
+  const W1=CFG.words1||["amber","glass","tidal","velvet","ember","lunar","coral","moss","indigo","opal","dusk","saffron"],W2=CFG.words2||["river","bloom","drift","harbor","echo","canyon","garden","silk","storm","tulip","signal","orbit"];
+  $("#dice").onclick=()=>{state.seed=W1[Math.random()*W1.length|0]+" "+W2[Math.random()*W2.length|0]+" "+(Math.random()*90+10|0);sync();schedule()};
+  $("#dl").onclick=()=>{mainC.toBlob(b=>{const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=CFG.id+"-"+(state.seed.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"seed")+".png";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)})};
+  window.__lab={state,renderTo};
+  sync();draw();strips();
+}
+const L3=a=>a.map(c=>Math.pow(c/255,2.2));
+const mix3=(a,b,t)=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];
+function ramp(stops,t){t=clamp(t,0,1)*(stops.length-1);const i=Math.min(stops.length-2,t|0);return mix3(stops[i],stops[i+1],t-i)}
+const GAS=[[L3([228,196,150]),L3([190,140,96]),L3([240,222,190]),L3([158,100,70]),L3([214,170,120])],
+           [L3([210,226,236]),L3([120,158,190]),L3([232,240,246]),L3([86,124,164]),L3([170,196,214])],
+           [L3([236,190,120]),L3([176,98,60]),L3([246,226,180]),L3([120,70,52]),L3([208,150,96])]];
+function render(cv,P,W,H){
+  const ctx=cv.getContext("2d"),img=ctx.createImageData(W,H),d=img.data,R=rngFor(P.seed,"pl"),S=(R()*1e6)|0,T=P.type,m=Math.min(W,H);
+  const sb=new Float32Array(W*H),ns=Math.round((T==="Nebula"?1.1:.6)*W*H/1500),bright=[];
+  for(let s=0;s<ns;s++){const x=(R()*W)|0,y=(R()*H)|0,b=Math.pow(R(),3.4),hue=R();sb[y*W+x]=Math.max(sb[y*W+x],.2+b*.8);if(b>.72&&T==="Nebula")bright.push([x,y,b,hue])}
+  const sunA=P.sun*Math.PI/180;let Lx=Math.sin(sunA)*.92,Ly=-.28,Lz=Math.cos(sunA)*.92;{const l=Math.hypot(Lx,Ly,Lz);Lx/=l;Ly/=l;Lz/=l}
+  const ringed=T==="Ringed giant",r=(ringed?.72:1)*P.size*H,cx=W/2,cy=H/2,inv=1/r;
+  const tilt=ringed?.32+R()*.3:0,roll=(R()-.5)*.5,ct=Math.cos(tilt),st=Math.sin(tilt);
+  let npx=0,npy=ct,npz=-st;{const c=Math.cos(roll),s=Math.sin(roll),x=npx*c-npy*s,y=npx*s+npy*c;npx=x;npy=y}
+  const gas=GAS[(R()*3)|0],fq=5+R()*5,sx=.3+R()*.2,sy=.18+R()*.3*(R()<.5?1:-1),rockHue=R(),ox=R()*50,oy=R()*50,oz=R()*50;
+  const wl=.38+P.water*.24;
+  const hA=R()*360,hB=hA+60+R()*90,hC=hA+180+(R()-.5)*60;
+  const cA=oklchFit(.5,.17,hA),cB=oklchFit(.62,.2,hB),cC=oklchFit(.42,.13,hC);
+  const lA=oklab2lin(cA[0],cA[1],cA[2]),lB=oklab2lin(cB[0],cB[1],cB[2]),lC=oklab2lin(cC[0],cC[1],cC[2]);
+  function ringAt(rho,x,y){if(rho<1.28||rho>2.35)return 0;const t=(rho-1.28)/1.07;
+    let o=.35+.6*vnoise(rho*70,0,S)*(.5+vnoise(rho*13,1,S+2));o*=sstep(0,.05,t)*sstep(1,.93,t);
+    o*=1-.92*sstep(.045,0,Math.abs(rho-1.87));o*=1-.8*sstep(.03,0,Math.abs(rho-2.02));return clamp(o,0,.97)}
+  function ringCol(rho){return mix3(L3([150,128,104]),L3([226,206,170]),clamp(.5+.5*Math.sin(rho*37)+.25*vnoise(rho*50,3,S),0,1))}
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const i=(y*W+x)*4,u=(x-cx)*inv,v=(y-cy)*inv;let R_=0,G_=0,B_=0;
+    if(T==="Nebula"){
+      const px=x/m*2.1,py=y/m*2.1,q=fbm2(px+ox,py+oy,S,4),w=fbm2(px+4*q+1.7,py+4*q+9.2,S+7,4),f=fbm2(px+3.2*w+8,py+3.2*w+2,S+13,5);
+      const dens=Math.pow(clamp(f*1.45-.18,0,1),1.9),t2=clamp(w*1.5-.2,0,1);
+      let col=mix3(mix3(lA,lB,t2),lC,clamp((q-.45)*3,0,1)*.7);
+      const lane=1-.88*sstep(.5,.72,fbm2(px*2.6+30,py*2.6+11,S+21,4))*sstep(.1,.5,f);
+      const core=Math.pow(clamp(f*1.9-.9,0,1),2)*1.5;
+      R_=(col[0]*dens*1.25+core*.3)*lane;G_=(col[1]*dens*1.25+core*.27)*lane;B_=(col[2]*dens*1.25+core*.25)*lane;
+      R_+=.004;G_+=.005;B_+=.01}
+    else{R_=.003+.004*Math.pow(y/H,2);G_=.004+.006*Math.pow(y/H,2);B_=.01+.016*Math.pow(y/H,2);
+      const nb=fbm2(x/m*1.6+ox,y/m*1.6+oy,S+3,3);R_+=.012*nb*nb*(lA[0]+.2);G_+=.012*nb*nb*(lA[1]+.2);B_+=.02*nb*nb*(lA[2]+.2)}
+    const st1=sb[y*W+x];if(st1){const tint=T==="Nebula"?1:.9;R_+=st1;G_+=st1*.97;B_+=st1*tint}
+    const d2=u*u+v*v,rn=Math.sqrt(d2);
+    if(T!=="Nebula"){
+      let pr=0,pg=0,pb=0,cov=0,ringBack=false;
+      if(rn<1+2/r*1.0){
+        const z=Math.sqrt(Math.max(0,1-d2)),nx=u,ny=v,nz=z;cov=clamp((1-rn)*r+.5,0,1);
+        const ndl=nx*Lx+ny*Ly+nz*Lz;let lit=sstep(-.12,.35,ndl)*.9+.1*clamp(ndl+.2,0,1);
+        let col,spec=0,cl=0;
+        const X=nx*1.0+ox,Y=ny*1.0+oy,Z=nz*1.0+oz;
+        if(T==="Rocky"){
+          const h=fbm3(X*1.9,Y*1.9,Z*1.9,S,5)*.8+.2*fbm3(X*7,Y*7,Z*7,S+9,3),lat=Math.abs(ny);
+          if(h<wl){const dp=clamp((wl-h)/.28,0,1);col=mix3(L3([70,150,186]),L3([8,28,78]),Math.pow(dp,.6));spec=Math.pow(clamp(2*ndl*nz-nz*Lz*0+0,0,1),1)*0;
+            const hv=[Lx,Ly,Lz+1],hl=Math.hypot(hv[0],hv[1],hv[2]);spec=Math.pow(clamp((nx*hv[0]+ny*hv[1]+nz*hv[2])/hl,0,1),90)*.9}
+          else{const k=clamp((h-wl)/.3,0,1),dry=clamp(fbm3(X*2.4+5,Y*2.4,Z*2.4,S+4,3)*1.5-.3+lat*.2,0,1);
+            col=mix3(mix3(L3([52,112,52]),L3([166,138,84]),dry),L3([140,124,110]),k*k);if(k>.8)col=mix3(col,L3([240,240,244]),(k-.8)*4)}
+          const ice=sstep(.8,.9,lat+(fbm3(X*4,Y*4,Z*4,S+6,3)-.5)*.14);col=mix3(col,L3([236,242,248]),ice);
+          const wx=fbm3(X*1.6+3,Y*1.6,Z*1.6,S+11,3)*2.4;cl=clamp((fbm3(X*2.6+wx,Y*2.6,Z*2.6+wx,S+12,5)-.5)*3.2*P.clouds*1.6+.0,0,1)*P.clouds*1.3;cl=clamp(cl,0,.95)}
+        else if(T==="Ice"){
+          const h=fbm3(X*2.2,Y*2.2,Z*2.2,S,5),cr=Math.abs(fbm3(X*3.1+9,Y*3.1,Z*3.1,S+5,4)-.5),line=1-sstep(.0,.035,cr);
+          col=mix3(mix3(L3([196,226,240]),L3([240,248,252]),h),L3([92,148,190]),line*.8+sstep(.5,.0,h)*.15);spec=Math.pow(clamp(nz,0,1),12)*.12;cl=P.clouds*.3*clamp(fbm3(X*3,Y*3,Z*3,S+12,4)*2-.7,0,1)}
+        else{
+          const w=fbm3(X*2.2,Y*2.2,Z*2.2,S+3,4),b=ny*fq+w*.7+fbm3(X*9,Y*9*.2,Z*9,S+8,3)*.15;
+          col=ramp(gas,.5+.5*Math.sin(b*3.1)+.25*(w-.5));
+          const ex=(nx-sx)/.34,ey=(ny-sy)/.17,e2=ex*ex+ey*ey;if(e2<1.6){const sw=Math.atan2(ey,ex)+e2*3;col=mix3(col,mix3(L3([190,70,50]),L3([232,170,120]),.5+.5*Math.sin(sw*2)),sstep(1.6,.4,e2)*.85)}}
+        // ring shadow
+        let shade=1;
+        if(ringed){const dn=npx*Lx+npy*Ly+npz*Lz;if(Math.abs(dn)>1e-4){const t=-(npx*nx+npy*ny+npz*nz)/dn;if(t>0){const qx=nx+t*Lx,qy=ny+t*Ly,qz=nz+t*Lz;shade=1-ringAt(Math.hypot(qx,qy,qz))*.85}}}
+        const dl=lit*shade;
+        pr=col[0]*dl;pg=col[1]*dl;pb=col[2]*dl;
+        if(cl>0){const cd=lit*shade*.95+.03;pr=pr*(1-cl)+cd*cl;pg=pg*(1-cl)+cd*cl;pb=pb*(1-cl)+cd*cl*1.0}
+        pr+=spec*lit;pg+=spec*lit;pb+=spec*lit;
+        // rim atmosphere
+        const rim=Math.pow(1-nz,3.2)*clamp(ndl*1.6+.35,0,1),ac=T==="Gas giant"||ringed?[.5,.4,.3]:T==="Ice"?[.35,.65,1]:[.22,.5,1];
+        const am=(T==="Gas giant"||ringed)?.25:.9;pr+=ac[0]*rim*am;pg+=ac[1]*rim*am;pb+=ac[2]*rim*am;
+        const k=cov;R_=R_*(1-k)+pr*k;G_=G_*(1-k)+pg*k;B_=B_*(1-k)+pb*k}
+      if(rn>1){const gl=Math.exp(-(rn-1)*16)*clamp((u*Lx+v*Ly)*.9+.5,0,1)*(T==="Gas giant"||ringed?.18:.55)*(1-sstep(1,1.35,rn)*0);
+        const ac=T==="Ice"?[.3,.55,1]:T==="Rocky"?[.18,.42,1]:[.5,.4,.3];R_+=ac[0]*gl;G_+=ac[1]*gl;B_+=ac[2]*gl}
+      if(ringed){const dn=npz;let t=-(npx*u+npy*v)/npz;const zz=t,rho=Math.hypot(u,v,zz),o=ringAt(rho);
+        if(o>0&&(rn>=1||zz>0)){
+          let lt=.9;{const qx=u,qy=v,qz=zz,b=qx*Lx+qy*Ly+qz*Lz;if(b<0&&(rho*rho-b*b)<1)lt=.08}
+          const rc=ringCol(rho);R_=R_*(1-o)+rc[0]*o*lt;G_=G_*(1-o)+rc[1]*o*lt;B_=B_*(1-o)+rc[2]*o*lt}}
+    }
+    d[i]=enc(1-Math.exp(-R_*1.0));d[i+1]=enc(1-Math.exp(-G_*1.0));d[i+2]=enc(1-Math.exp(-B_*1.0));d[i+3]=255}
+  ctx.putImageData(img,0,0);
+  if(T==="Nebula"){ctx.globalCompositeOperation="lighter";
+    for(const [x,y,b,h] of bright){const rr=m*(.008+.02*b),col=h<.33?"255,225,190":h<.66?"200,220,255":"255,255,255";
+      const g=ctx.createRadialGradient(x,y,0,x,y,rr);g.addColorStop(0,"rgba("+col+","+(.8*b)+")");g.addColorStop(.25,"rgba("+col+","+(.25*b)+")");g.addColorStop(1,"rgba("+col+",0)");ctx.fillStyle=g;ctx.fillRect(x-rr,y-rr,rr*2,rr*2);
+      if(b>.85){ctx.strokeStyle="rgba("+col+","+(.5*b)+")";ctx.lineWidth=Math.max(1,m*.0012);const L=rr*2.2;ctx.beginPath();ctx.moveTo(x-L,y);ctx.lineTo(x+L,y);ctx.moveTo(x,y-L);ctx.lineTo(x,y+L);ctx.stroke()}}
+    ctx.globalCompositeOperation="source-over"}
+  return T}
+const TY=[["Rocky","Rocky"],["Ice","Ice"],["Gas giant","Gas giant"],["Ringed giant","Ringed giant"],["Nebula","Nebula"]];
+const CFG={id:"planets",title:"Planets & nebulae",lead:"Worlds lit by a distant sun, drawn pixel by pixel as shaded spheres: oceans and continents under drifting clouds, cracked ice, banded gas giants with ringed shadows, and glowing nebulae threaded with dust and stars.",
+  mainW:900,thumbW:300,aspect:1.5,render,
+  sliders:[{k:"sun",label:"Sun",min:-170,max:170,step:1,v:-55,fmt:v=>v+"°"},{k:"size",label:"Size",min:.25,max:.5,step:.01,v:.38,fmt:v=>Math.round(v*200)+"%"},{k:"clouds",label:"Clouds",min:0,max:1,step:.01,v:.55,fmt:v=>Math.round(v*100)+"%"},{k:"water",label:"Water",min:0,max:1,step:.01,v:.5,fmt:v=>Math.round(v*100)+"%"}],
+  segs:[{k:"type",label:"Type",v:"Rocky",opts:TY}],
+  strips:[{title:"Type",sub:"One seed, five kinds of sky object.",k:"type",opts:TY},
+          {title:"Sun angle",sub:"The light moves around the planet, from crescent to full.",k:"sun",opts:[["Behind",-150],["Left",-70],["Front",0],["Right",70]]}]};
+startLab(CFG);
+</script>
+</body>
+</html>
