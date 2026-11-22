@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<!--
+  Ebru — a swirlseed labs demo (standalone, not part of the byte-exact library).
+  Author: Peter Alexeev Dauwalter <alexeev.dauwalter@41t.org>
+  Year: 2026
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ebru · swirlseed labs</title>
+<meta name="description" content="Turkish paper marbling (ebru) simulated from a seed string: battal, gel-git, taraklı, bülbül yuvası and hatip patterns.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<style>
+:root{--ink:#14151a;--page:#eeeef0}
+*{box-sizing:border-box;margin:0}
+body{min-height:100vh;font:15px/1.4 ui-sans-serif,-apple-system,"SF Pro Display","Inter",system-ui,sans-serif;color:var(--ink);background:radial-gradient(circle,rgba(20,20,40,.13) 1px,transparent 1.6px) 0 0/22px 22px,var(--page);padding:44px 28px 36px;-webkit-font-smoothing:antialiased;overflow-x:clip}
+.wrap{max-width:1120px;margin:0 auto}
+.back{display:inline-block;margin-bottom:14px;color:#6b6a78;text-decoration:none;font-size:14px}.back:hover{color:var(--ink)}
+h1{font-size:30px;letter-spacing:-.03em;font-weight:650}
+.lead{color:#6b6a78;margin:6px 0 24px;max-width:660px}
+.frame{border-radius:28px;overflow:hidden;background:#ddd;line-height:0;box-shadow:0 30px 50px -24px rgba(30,20,70,.55),0 3px 8px rgba(30,20,70,.2);position:relative}
+.frame canvas{width:100%;height:auto;display:block}
+.badge{position:absolute;left:16px;top:14px;line-height:1.2;color:#fff;font-size:13px;padding:7px 12px;border-radius:999px;background:rgba(10,12,24,.42);border:1px solid rgba(255,255,255,.25);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.panel{margin-top:18px;background:rgba(255,255,255,.78);border:1px solid #fff;border-radius:26px;padding:20px 22px;box-shadow:0 20px 40px -24px rgba(30,20,70,.4);display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 34px}
+.field{margin:6px 0 12px}
+.lab{display:block;font-size:12px;font-weight:600;color:#55546a;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em}
+.field input[type=text]{width:100%;font:inherit;padding:10px 14px;border-radius:14px;border:1px solid #dcdbe6;background:#fff;outline:0}
+.field input[type=text]:focus{border-color:var(--ink)}
+.row{display:grid;grid-template-columns:86px 1fr 56px;align-items:center;gap:10px;font-size:13.5px;margin:10px 0}
+.row output{text-align:right;font-variant-numeric:tabular-nums;color:#55546a;font-size:12.5px}
+input[type=range]{width:100%;accent-color:#14151a}
+.seg{display:flex;flex-wrap:wrap;gap:4px;background:#e6e5ee;border-radius:12px;padding:3px}
+.seg button{flex:1 0 auto;border:0;background:transparent;font:inherit;font-size:13px;padding:7px 9px;border-radius:9px;cursor:pointer;color:#33323f}
+.seg button.on{background:#fff;box-shadow:0 2px 6px rgba(30,20,70,.18);font-weight:600}
+.btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;grid-column:1/-1}
+.btn{border:1px solid #fff;background:#fff;color:var(--ink);font:inherit;font-size:14px;padding:9px 18px;border-radius:999px;cursor:pointer;box-shadow:0 4px 12px -6px rgba(40,30,90,.4)}
+.btn.dark{background:var(--ink);color:#fff;border-color:var(--ink)}
+.btn:disabled{opacity:.5;cursor:default}
+h2{font-size:20px;letter-spacing:-.02em;margin:34px 0 4px}
+.sub{color:#6b6a78;font-size:13.5px;margin-bottom:12px}
+.strip{display:grid;gap:12px;grid-template-columns:repeat(var(--n,5),minmax(0,1fr))}
+.th{position:relative;border-radius:18px;overflow:hidden;line-height:0;cursor:pointer;background:#ddd;box-shadow:0 14px 24px -14px rgba(30,20,70,.5);transition:transform .25s}
+.th:hover{transform:translateY(-3px)}.th.on{outline:2px solid var(--ink);outline-offset:2px}
+.th canvas{width:100%;height:auto;display:block}
+.th span{position:absolute;left:8px;bottom:8px;line-height:1.1;font-size:11.5px;color:#fff;padding:4px 9px;border-radius:999px;background:rgba(10,12,24,.45);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.note{margin-top:34px;color:#6b6a78;font-size:13.5px;max-width:720px}
+footer{margin-top:40px;color:#7a7888;font-size:13px}
+@media(max-width:760px){.panel{grid-template-columns:minmax(0,1fr)}.strip{grid-template-columns:repeat(2,minmax(0,1fr))}body{padding:28px 16px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="back" href="../">← swirlseed</a>
+<h1>Ebru</h1>
+<p class="lead">Turkish paper marbling, simulated. Drops of paint spread on the water and push each other aside, then a stylus and combs draw the pattern. Every drop, stroke and colour comes from the seed.</p>
+<div class="frame"><canvas id="main"></canvas><div class="badge" id="badge"></div></div>
+<div class="panel">
+  <div>
+    <div class="field"><label class="lab" for="seed">Seed</label><input type="text" id="seed" value="Hello, world!" spellcheck="false" autocomplete="off"></div>
+    <div class="row"><span>Drops</span><input type="range" id="density" min="0.3" max="1.6" step="0.05"><output id="densityo"></output></div>
+    <div class="row"><span>Drop size</span><input type="range" id="size" min="0.5" max="1.8" step="0.05"><output id="sizeo"></output></div>
+    <div class="row"><span>Comb</span><input type="range" id="comb" min="0.5" max="2" step="0.05"><output id="combo"></output></div>
+  </div>
+  <div>
+    <div class="field"><span class="lab">Pattern</span><div class="seg" id="styles"></div></div>
+    <div class="field"><span class="lab">Palette</span><div class="seg" id="pals"></div></div>
+    <div class="field"><span class="lab">Aspect</span><div class="seg" id="asp"></div></div>
+  </div>
+  <div class="btns"><button class="btn dark" id="watch">Watch it being made</button><button class="btn" id="dice">Random seed</button><button class="btn" id="dl">Download PNG</button></div>
+</div>
+<h2>Patterns</h2><p class="sub">The classic ebru techniques, each built on top of the previous one. Same seed, same paint.</p>
+<div class="strip" id="s-style" style="--n:5"></div>
+<h2>Palettes</h2><p class="sub">Traditional pigment sets. “Auto” lets the seed choose.</p>
+<div class="strip" id="s-pal" style="--n:5"></div>
+<p class="note"><b>Battal</b>: sprinkled drops only. <b>Gel-git</b>: a stylus drawn back and forth, then across. <b>Taraklı</b>: gel-git finished with a fine comb. <b>Bülbül yuvası</b> (“nightingale’s nest”): taraklı with small spirals. <b>Hatip</b>: concentric drops pulled into hearts over a battal ground.</p>
+<footer>© 2026 Peter Alexeev Dauwalter · swirlseed labs</footer>
+</div>
+<script>
+"use strict";
+// ---------- shared: seeded RNG, value noise, marbling engine ----------
+const clamp=(x,a,b)=>x<a?a:x>b?b:x;
+function cyrb128(str){let h1=1779033703,h2=3144134277,h3=1013904242,h4=2773480762;for(let i=0,k;i<str.length;i++){k=str.charCodeAt(i);h1=h2^Math.imul(h1^k,597399067);h2=h3^Math.imul(h2^k,2869860233);h3=h4^Math.imul(h3^k,951274213);h4=h1^Math.imul(h4^k,2716044179)}
+  h1=Math.imul(h3^(h1>>>18),597399067);h2=Math.imul(h4^(h2>>>22),2869860233);h3=Math.imul(h1^(h3>>>17),951274213);h4=Math.imul(h2^(h4>>>19),2716044179);return[(h1^h2^h3^h4)>>>0,(h2^h1)>>>0,(h3^h1)>>>0,(h4^h1)>>>0]}
+function sfc32(a,b,c,d){return function(){a>>>=0;b>>>=0;c>>>=0;d>>>=0;let t=(a+b)|0;a=b^(b>>>9);b=(c+(c<<3))|0;c=(c<<21|c>>>11);d=(d+1)|0;t=(t+d)|0;c=(c+t)|0;return(t>>>0)/4294967296}}
+function rngFor(seed,salt){const h=cyrb128(salt+"\u0000"+seed.normalize("NFC"));const r=sfc32(h[0],h[1],h[2],h[3]);for(let i=0;i<15;i++)r();return r}
+function hash2(x,y,s){let h=Math.imul(x|0,374761393)+Math.imul(y|0,668265263)+Math.imul(s|0,1274126177);h=Math.imul(h^(h>>>13),1274126177);h^=h>>>16;return(h>>>0)/4294967296}
+function vnoise(x,y,s){const xi=Math.floor(x),yi=Math.floor(y),xf=x-xi,yf=y-yi,u=xf*xf*(3-2*xf),v=yf*yf*(3-2*yf);
+  const a=hash2(xi,yi,s),b=hash2(xi+1,yi,s),c=hash2(xi,yi+1,s),d=hash2(xi+1,yi+1,s);return a+(b-a)*u+(c-a)*v+(a-b-c+d)*u*v}
+function fbm(x,y,s,o){let t=0,a=.5,n=0;for(let i=0;i<o;i++){t+=a*vnoise(x,y,s+i*31);n+=a;a*=.5;x*=2.03;y*=2.03}return t/n}
+const LN2=Math.LN2;
+
+/*
+  Mathematical marbling (after A. Lu, S. Jaffer et al.): every operation is an
+  area-preserving map applied to all ink boundaries. Boundaries are polygons; when
+  a map stretches an edge, extra points are inserted by mapping the edge's original
+  midpoints, so curves stay smooth however much they are pulled.
+*/
+class Marble{
+  constructor(seg){this.P=[];this.seg=seg||0.004;this.cap=7000}
+  apply(fn){
+    const maxL=this.seg*1.6,out=[0,0],cap=this.cap;
+    for(const p of this.P){
+      const X=p.x,Y=p.y,n=X.length,mx=new Float64Array(n),my=new Float64Array(n);
+      for(let i=0;i<n;i++){fn(X[i],Y[i],out);mx[i]=out[0];my[i]=out[1]}
+      const nx=[],ny=[];let budget=Math.max(0,cap-n);
+      for(let i=0;i<n;i++){
+        nx.push(mx[i]);ny.push(my[i]);
+        const j=i+1<n?i+1:0,L=Math.hypot(mx[j]-mx[i],my[j]-my[i]);
+        if(L>maxL&&budget>0){
+          const m=Math.min(12,Math.ceil(L/maxL),budget+1);
+          for(let s=1;s<m;s++){const t=s/m;fn(X[i]+(X[j]-X[i])*t,Y[i]+(Y[j]-Y[i])*t,out);nx.push(out[0]);ny.push(out[1])}
+          budget-=m-1;
+        }
+      }
+      p.x=nx;p.y=ny;
+    }
+  }
+  drop(cx,cy,r,col,meta){
+    const r2=r*r;
+    this.apply((x,y,o)=>{const dx=x-cx,dy=y-cy,d2=dx*dx+dy*dy+1e-14,k=Math.sqrt(1+r2/d2);o[0]=cx+dx*k;o[1]=cy+dy*k});
+    const n=Math.max(36,Math.min(600,Math.ceil(2*Math.PI*r/this.seg))),xs=[],ys=[];
+    for(let i=0;i<n;i++){const a=i/n*2*Math.PI;xs.push(cx+r*Math.cos(a));ys.push(cy+r*Math.sin(a))}
+    this.P.push({x:xs,y:ys,c:col,m:meta||0});
+  }
+  // a single stylus line through (ax,ay) in direction (mx,my)
+  tine(ax,ay,mx,my,z,c){
+    const l=Math.hypot(mx,my);mx/=l;my/=l;const nx=-my,ny=mx,k=LN2/c;
+    this.apply((x,y,o)=>{const d=Math.abs((x-ax)*nx+(y-ay)*ny),f=z*Math.exp(-d*k);o[0]=x+f*mx;o[1]=y+f*my});
+  }
+  // a comb: parallel tines every `sp`; with `alt` neighbouring tines move in opposite directions
+  comb(ax,ay,mx,my,z,c,sp,alt){
+    const l=Math.hypot(mx,my);mx/=l;my/=l;const nx=-my,ny=mx,k=LN2/c;
+    this.apply((x,y,o)=>{const t=(x-ax)*nx+(y-ay)*ny,k0=Math.round(t/sp);let f=0;
+      for(let q=k0-1;q<=k0+1;q++){const d=Math.abs(t-q*sp);f+=(alt&&(q&1)?-1:1)*z*Math.exp(-d*k)}
+      o[0]=x+f*mx;o[1]=y+f*my});
+  }
+  // a whirl: rotation that fades with distance from the centre
+  swirl(cx,cy,a,R){
+    this.apply((x,y,o)=>{const dx=x-cx,dy=y-cy,r=Math.hypot(dx,dy),th=a*Math.exp(-r/R),cs=Math.cos(th),sn=Math.sin(th);o[0]=cx+dx*cs-dy*sn;o[1]=cy+dx*sn+dy*cs});
+  }
+  // gentle, almost area-preserving drift along a curl-noise field (a breath over the water)
+  breath(amp,freq,s){
+    const e=1e-3;const psi=(x,y)=>fbm(x*freq,y*freq,s,3);
+    this.apply((x,y,o)=>{const vx=(psi(x,y+e)-psi(x,y-e))/(2*e),vy=-(psi(x+e,y)-psi(x-e,y))/(2*e);o[0]=x+vx*amp;o[1]=y+vy*amp});
+  }
+  points(){let n=0;for(const p of this.P)n+=p.x.length;return n}
+}
+function hexRgb(h){const v=parseInt(h.slice(1),16);return[v>>16&255,v>>8&255,v&255]}
+function rgbHex(c){return"#"+c.map(v=>Math.round(clamp(v,0,255)).toString(16).padStart(2,"0")).join("")}
+function mix(a,b,t){const A=hexRgb(a),B=hexRgb(b);return rgbHex(A.map((v,i)=>v+(B[i]-v)*t))}
+function tracePoly(ctx,p,S){const X=p.x,Y=p.y;ctx.beginPath();ctx.moveTo(X[0]*S,Y[0]*S);for(let i=1;i<X.length;i++)ctx.lineTo(X[i]*S,Y[i]*S);ctx.closePath()}
+// paper: fine grain + soft clouding + a few fibres; returns a canvas to multiply over the print
+function paperTexture(W,H,seed,strength){
+  const c=document.createElement("canvas");c.width=W;c.height=H;const ctx=c.getContext("2d"),img=ctx.createImageData(W,H),d=img.data,s=(cyrb128(seed)[0]%9973)|0;
+  const sc=600/Math.max(W,H);
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const cl=fbm(x*sc*0.012,y*sc*0.012,s,4),g=hash2(x,y,s+7)-0.5;
+    const v=255*(1-strength*(0.05*cl+0.035*g+0.02));const i=(y*W+x)*4;d[i]=v;d[i+1]=v*0.995;d[i+2]=v*0.985;d[i+3]=255}
+  ctx.putImageData(img,0,0);
+  const r=rngFor(seed,"fibres");ctx.lineCap="round";
+  const n=Math.round(W*H/2600*strength);
+  for(let i=0;i<n;i++){const x=r()*W,y=r()*H,a=r()*Math.PI*2,l=(6+r()*26)*W/1000,cv=(r()-.5)*l*.6;
+    ctx.strokeStyle=r()<.5?"rgba(120,100,70,0.10)":"rgba(255,255,255,0.35)";ctx.lineWidth=(0.4+r()*0.7)*W/1000;
+    ctx.beginPath();ctx.moveTo(x,y);ctx.quadraticCurveTo(x+Math.cos(a)*l/2-Math.sin(a)*cv,y+Math.sin(a)*l/2+Math.cos(a)*cv,x+Math.cos(a)*l,y+Math.sin(a)*l);ctx.stroke()}
+  return c;
+}
+const PALS={
+  Klasik:{bg:"#efe6d0",inks:["#1f2c5c","#c8963e","#8c2f2b","#5f7a5a","#efe6d0"]},
+  Deniz:{bg:"#e9e3d3",inks:["#123a63","#2f8f9d","#d9c9a3","#0b1f3a","#f1ead8"]},
+  Gül:{bg:"#f2e7dc",inks:["#7a1f33","#c9566b","#d9b46a","#8a9a78","#f4ece2"]},
+  Toprak:{bg:"#e8dcc2",inks:["#5b3a24","#a0522d","#c99a3b","#6b6b3a","#efe4cc"]},
+  Lale:{bg:"#f0e8d4",inks:["#b3261e","#e0a526","#2e6b3f","#2a4a9b","#f2ead6"]}
+};
+const PAL_NAMES=Object.keys(PALS);
+const STYLES=["Battal","Gel-git","Taraklı","Bülbül yuvası","Hatip"];
+
+// Build the list of operations for a seed. Geometry is in tray units: width 1, height h.
+function plan(seed,style,o,h){
+  const R=rngFor(seed,"ebru"),pick=a=>a[(R()*a.length)|0];
+  const palName=o.pal==="Auto"?PAL_NAMES[(rngFor(seed,"pal")()*PAL_NAMES.length)|0]:o.pal,pal=PALS[palName];
+  const ops=[],inks=pal.inks;
+  // battal: colour by colour, rounds of sprinkled drops; later colours squeeze earlier ones into veins
+  const battal=(scale,count)=>{
+    const rounds=inks.length;
+    for(let k=0;k<rounds;k++){
+      const col=inks[k],n=Math.round(count*(0.6+0.8*R())/rounds*(k===rounds-1?1.4:1));
+      for(let i=0;i<n;i++){const x=-0.05+R()*1.1,y=-0.05+R()*(h+0.1),r=(0.016+Math.pow(R(),2)*0.055)*scale;ops.push(m=>m.drop(x,y,r,col))}
+    }
+  };
+  const S=o.size,D=o.density,C=o.comb;
+  const gelgit=()=>{
+    const sp=0.075/C,ph=R()*sp;
+    ops.push(m=>m.comb(ph,0,0,1,0.07,0.012,sp,true));
+    const sp2=0.09/C,ph2=R()*sp2;
+    ops.push(m=>m.comb(0,ph2,1,0,0.06,0.012,sp2,true));
+  };
+  const fineComb=()=>{const sp=0.022/C,ph=R()*sp,dir=R()<.5?1:-1;ops.push(m=>m.comb(ph,0,0,dir,0.05,0.006,sp,false))};
+  if(style==="Hatip"){
+    battal(S*0.8,Math.round(200*D));
+    const sp=0.16/Math.sqrt(D),rings=[inks[2],inks[4],inks[0],inks[1]].slice(0,3+(R()<.5?1:0));
+    const cols=Math.ceil(1/sp)+1,rows=Math.ceil(h/sp)+1,base=(0.034+0.01*R())*S;
+    for(let j=0;j<rows;j++)for(let i=0;i<cols;i++){
+      const x=(i+0.5+(j&1)*0.5)*sp-sp*0.25,y=(j+0.5)*sp;
+      rings.forEach((col,q)=>{const r=base*(1-q*0.22);ops.push(m=>m.drop(x,y,r,col))});
+    }
+    for(let i=0;i<cols*2;i++){const x=(i*0.5+0.5)*sp-sp*0.25;ops.push(m=>m.tine(x,0,0,1,0.06,0.011))}
+  }else{
+    battal(S,Math.round(320*D));
+    if(style!=="Battal")gelgit();
+    if(style==="Taraklı"||style==="Bülbül yuvası")fineComb();
+    if(style==="Bülbül yuvası"){
+      const sp=0.11/Math.sqrt(C),dir=R()<.5?1:-1;
+      for(let y=sp/2;y<h;y+=sp)for(let x=sp/2;x<1;x+=sp){const xx=x+(R()-.5)*sp*0.15,yy=y+(R()-.5)*sp*0.15;ops.push(m=>m.swirl(xx,yy,dir*(9+R()*4),sp*0.17))}
+    }
+  }
+  return{ops,pal,palName};
+}
+
+function renderMarble(canvas,m,pal,paper){
+  const W=canvas.width,H=canvas.height,ctx=canvas.getContext("2d"),S=W;
+  ctx.fillStyle=pal.bg;ctx.fillRect(0,0,W,H);
+  ctx.lineJoin="round";
+  for(const p of m.P){
+    tracePoly(ctx,p,S);ctx.fillStyle=p.c;ctx.fill();
+    ctx.strokeStyle=mix(p.c,"#000000",0.35);ctx.globalAlpha=0.45;ctx.lineWidth=Math.max(0.6,W/1100);ctx.stroke();ctx.globalAlpha=1;
+  }
+  if(paper){ctx.globalCompositeOperation="multiply";ctx.drawImage(paper,0,0);ctx.globalCompositeOperation="source-over"}
+}
+const $=s=>document.querySelector(s);
+const state={seed:"Hello, world!",style:"Taraklı",pal:"Auto",density:1,size:1,comb:1,aspect:1.5};
+const ASPECTS=[["3:2",1.5],["1:1",1],["2:3",2/3],["16:9",16/9]];
+const paperCache={};
+function paperFor(W,H){const k=W+"x"+H;return paperCache[k]||(paperCache[k]=paperTexture(W,H,"paper",1))}
+function build(P,seg){const h=1/P.aspect,pl=plan(P.seed,P.style,P,h),m=new Marble(seg);for(const op of pl.ops)op(m);return{m,pl}}
+function renderTo(canvas,P,W,seg){
+  const H=Math.round(W/P.aspect);canvas.width=W;canvas.height=H;
+  const t=performance.now(),{m,pl}=build(P,seg);renderMarble(canvas,m,pl.pal,paperFor(W,H));
+  return{ms:performance.now()-t,pts:m.points(),pal:pl.palName};
+}
+const mainC=$("#main");let anim=0;
+function draw(){
+  const r=renderTo(mainC,state,1080,0.0028);
+  $("#badge").textContent=state.style+" · "+r.pal+" · "+Math.round(r.pts/1000)+"k points · "+Math.round(r.ms)+" ms";
+}
+let tok=0;
+function strips(){
+  const my=++tok,jobs=[];
+  const mk=(host,list,apply,isOn)=>{const el=$(host);el.innerHTML="";list.forEach(v=>{const d=document.createElement("div");d.className="th";const c=document.createElement("canvas");const sp=document.createElement("span");sp.textContent=v;d.append(c,sp);
+    d.onclick=()=>{apply(v);sync();schedule();scrollTo({top:0,behavior:"smooth"})};el.appendChild(d);jobs.push(()=>{const P=Object.assign({},state);apply.call(null,v,P);renderTo(c,P,360,0.006);d.classList.toggle("on",isOn(v))})})};
+  mk("#s-style",STYLES,(v,P)=>{(P||state).style=v},v=>state.style===v);
+  mk("#s-pal",PAL_NAMES,(v,P)=>{(P||state).pal=v},v=>state.pal===v);
+  let i=0;(function step(){if(my!==tok||i>=jobs.length)return;jobs[i++]();setTimeout(step,0)})();
+}
+let timer=0;
+function schedule(){cancelAnim();$("#badge").textContent="Painting…";clearTimeout(timer);timer=setTimeout(()=>{draw();strips()},60)}
+function segBtns(host,list,key,label){const el=$(host);list.forEach(v=>{const b=document.createElement("button");const val=Array.isArray(v)?v[1]:v;b.textContent=Array.isArray(v)?v[0]:(label?label(v):v);b.dataset.v=val;b.onclick=()=>{state[key]=val;sync();schedule()};el.appendChild(b)})}
+segBtns("#styles",STYLES,"style");segBtns("#pals",["Auto",...PAL_NAMES],"pal");segBtns("#asp",ASPECTS,"aspect");
+function sync(){
+  $("#seed").value=state.seed;
+  for(const k of ["density","size","comb"]){$("#"+k).value=state[k];$("#"+k+"o").textContent="×"+(+state[k]).toFixed(2)}
+  for(const [h,k] of [["#styles","style"],["#pals","pal"],["#asp","aspect"]])[...$(h).children].forEach(b=>b.classList.toggle("on",String(state[k])===b.dataset.v));
+}
+$("#seed").addEventListener("input",e=>{state.seed=e.target.value;clearTimeout(timer);timer=setTimeout(schedule,250)});
+for(const k of ["density","size","comb"])$("#"+k).addEventListener("input",e=>{state[k]=+e.target.value;$("#"+k+"o").textContent="×"+state[k].toFixed(2);clearTimeout(timer);timer=setTimeout(schedule,250)});
+const W1=["amber","glass","tidal","velvet","ember","lunar","coral","moss","indigo","opal","dusk","saffron"],W2=["river","bloom","drift","harbor","echo","canyon","garden","silk","storm","tulip","bosphorus","nest"];
+$("#dice").onclick=()=>{state.seed=W1[Math.random()*W1.length|0]+" "+W2[Math.random()*W2.length|0]+" "+(Math.random()*90+10|0);sync();schedule()};
+$("#dl").onclick=()=>{mainC.toBlob(b=>{const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="ebru"+"-"+(state.seed.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"seed")+".png";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)})};
+function cancelAnim(){if(anim){clearTimeout(anim);anim=0;$("#watch").textContent="Watch it being made"}}
+$("#watch").onclick=function(){
+  if(anim){cancelAnim();draw();return}
+  this.textContent="Stop";
+  const W=900,H=Math.round(W/state.aspect);mainC.width=W;mainC.height=H;
+  const pl=plan(state.seed,state.style,state,1/state.aspect),m=new Marble(0.0036),paper=paperFor(W,H);let i=0;
+  const total=pl.ops.length;
+  (function step(){const t=performance.now();
+    while(i<total&&performance.now()-t<28){pl.ops[i++](m);if(m.P.length<8)break}
+    renderMarble(mainC,m,pl.pal,paper);$("#badge").textContent="Step "+i+" / "+total;
+    if(i<total)anim=setTimeout(step,i<40?90:16);else{anim=0;$("#watch").textContent="Watch it being made";$("#badge").textContent=state.style+" · "+pl.palName+" · done"}})();
+};
+window.__lab={state,renderTo,sync,draw};
+sync();draw();strips();
+</script>
+</body>
+</html>
