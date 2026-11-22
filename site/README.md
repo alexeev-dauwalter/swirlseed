@@ -14,7 +14,7 @@ Preview locally with any static server, for example `npx serve dist` (ES modules
 
 ## Cloudflare Pages
 
-Connect the GitHub repository in the Pages dashboard and use:
+The `swirlseed` Pages project is connected to GitHub and deploys automatically when `main` is pushed. The build settings are stored in Cloudflare Pages.
 
 | Setting | Value |
 | --- | --- |
@@ -23,6 +23,12 @@ Connect the GitHub repository in the Pages dashboard and use:
 | Build command | `npm --prefix packages/swirlseed install && npm --prefix packages/swirlseed run build && node site/build.mjs` |
 | Build output directory | `site/dist` |
 
-Or deploy a local build directly: `cd site && npx wrangler pages deploy dist --project-name swirlseed`.
+To redeploy the current remote `main` with the Cloudflare CLI:
+
+```sh
+cf pages deployments create swirlseed --branch main
+```
+
+Cloudflare builds the committed files from GitHub using the settings above.
 
 `src/_headers` sets security and cache headers; the page itself is a single `index.html`.
