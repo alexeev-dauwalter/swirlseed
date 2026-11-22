@@ -9,7 +9,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Watercolor · swirlseed labs</title>
-<meta name="description" content="Watercolor washes with pooled edges, bleeds and paper grain, generated from a seed string.">
+<meta name="description" content="Transparent watercolor washes with pooled edges, granulation and blooms, generated from a seed string.">
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <style>
 :root{--ink:#14151a;--page:#eeeef0}
@@ -121,48 +121,68 @@ function startLab(CFG){
   window.__lab={state,renderTo};
   sync();draw();strips();
 }
+// cold-press paper: height field (0..1) and a lit version for emboss shading
+function paperHeight(W,H,S,scale){const h=new Float32Array(W*H),m=Math.min(W,H)/ (scale||1);
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const u=x/m,v=y/m;h[y*W+x]=.5*fbm2(u*26,v*26,S+101,3)+.3*fbm2(u*70,v*70,S+102,2)+.2*hash2(x,y,S+103)}return h}
+function paperLight(h,W,H,k){const L=new Float32Array(W*H);for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x,xm=x>0?h[i-1]:h[i],ym=y>0?h[i-W]:h[i];L[i]=1+((h[i]-xm)*.7+(h[i]-ym)*.7)*k}return L}
+function boxBlur(a,W,H,r){if(r<1)return a;const t=new Float32Array(W*H),o=new Float32Array(W*H),n=2*r+1;
+  for(let y=0;y<H;y++){let s=0;const row=y*W;for(let x=-r;x<=r;x++)s+=a[row+clamp(x,0,W-1)];for(let x=0;x<W;x++){t[row+x]=s/n;s+=a[row+Math.min(W-1,x+r+1)]-a[row+Math.max(0,x-r)]}}
+  for(let x=0;x<W;x++){let s=0;for(let y=-r;y<=r;y++)s+=t[clamp(y,0,H-1)*W+x];for(let y=0;y<H;y++){o[y*W+x]=s/n;s+=t[Math.min(H-1,y+r+1)*W+x]-t[Math.max(0,y-r)*W+x]}}return o}
+// one layer of transparent pigment: A = water/pigment coverage (0..1); adds absorbance into Ab (rgb interleaved)
+function pigmentLayer(Ab,A,W,H,pig,o){
+  const m=Math.min(W,H),S=o.S|0,k=pig.map(c=>-Math.log(clamp(c,.02,.999))),Ab1=boxBlur(boxBlur(A,W,H,Math.max(1,Math.round(m*(o.edgeR||.006)))),W,H,Math.max(1,Math.round(m*(o.edgeR||.006))));
+  const fq=o.mottleF||3;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x,a=A[i];if(a<.003)continue;
+    const u=x/m,v=y/m,edge=Math.max(0,a-Ab1[i]),mot=.8+.4*fbm2(u*fq+S*.001,v*fq,S+11,4);
+    let D=a*mot+edge*(o.edge||2.4);
+    if(o.bloom){const n=fbm2(u*(o.bloomF||5),v*(o.bloomF||5),S+21,5),t=o.bloomT||.58,b=sstep(t,t+.015,n);D*=1-.3*b*a;D+=a*.55*o.bloom*Math.exp(-Math.pow((n-t)/.007,2))}
+    const g=o.ph?(1-(o.gran||.5)+(o.gran||.5)*2*o.ph[i]*(.6+.4*fbm2(u*40,v*40,S+31,2))):1;D*=g*(o.strength||1);
+    Ab[i*3]+=D*k[0];Ab[i*3+1]+=D*k[1];Ab[i*3+2]+=D*k[2]}}
+function developPaper(ctx,Ab,W,H,paper,ph,pl){const img=ctx.createImageData(W,H),d=img.data;
+  for(let i=0;i<W*H;i++){const l=pl?pl[i]:1,o=i*4;d[o]=enc(paper[0]*Math.exp(-Ab[i*3])*l);d[o+1]=enc(paper[1]*Math.exp(-Ab[i*3+1])*l);d[o+2]=enc(paper[2]*Math.exp(-Ab[i*3+2])*l);d[o+3]=255}
+  ctx.putImageData(img,0,0)}
+const L3=a=>a.map(c=>Math.pow(c/255,2.2));
+// pigment colours at full strength (as transmittance); each entry: rgb, granulates?
 const PAL={
-  Cobalt:[[218,70,46],[200,62,52],[238,48,42],[170,45,48],[28,70,58]],
-  Sunset:[[8,78,54],[28,88,56],[44,90,56],[335,55,50],[262,32,44]],
-  Forest:[[140,38,34],[95,42,42],[165,40,36],[52,62,52],[200,30,38]],
-  Rose:[[342,62,58],[322,42,52],[12,70,62],[280,28,56],[48,60,70]],
-  Sepia:[[28,42,36],[36,50,46],[18,38,30],[44,44,56],[220,12,40]]};
+  Cobalt:[[[40,80,170],.8],[[20,120,150],.5],[[70,60,150],.9],[[200,120,60],.6],[[30,90,80],.3]],
+  Sunset:[[[220,70,50],.3],[[240,150,40],.2],[[200,50,110],.3],[[110,60,140],.8],[[250,200,80],.1]],
+  Forest:[[[50,110,60],.4],[[140,150,50],.3],[[30,80,90],.6],[[150,100,50],.8],[[90,120,40],.4]],
+  Rose:[[[210,70,110],.3],[[230,120,120],.2],[[140,70,150],.6],[[240,170,90],.2],[[90,110,170],.7]],
+  Sepia:[[[110,70,40],.8],[[150,100,60],.7],[[70,50,40],.9],[[180,140,90],.5],[[80,90,110],.8]]};
 function render(cv,P,W,H){
-  const ctx=cv.getContext("2d"),R=rngFor(P.seed,"wc"),S=(R()*1e6)|0,pal=PAL[P.palette],m=Math.min(W,H);
-  const gauss=()=>{let u=0,v=0;while(!u)u=R();v=R();return Math.sqrt(-2*Math.log(u))*Math.cos(TAU*v)};
-  ctx.fillStyle="#f6f1e5";ctx.fillRect(0,0,W,H);
-  const deform=(p,depth,vr)=>{for(let d=0;d<depth;d++){const q=[];for(let i=0;i<p.length;i++){const a=p[i],b=p[(i+1)%p.length],l=Math.hypot(b[0]-a[0],b[1]-a[1]),mx=(a[0]+b[0])/2+gauss()*vr*l,my=(a[1]+b[1])/2+gauss()*vr*l;q.push(a,[mx,my])}p=q}return p};
-  const blob=(cx,cy,r,n)=>{const p=[],ph=R()*TAU;for(let i=0;i<n;i++){const a=ph+i/n*TAU,rr=r*(.75+.5*R());p.push([cx+Math.cos(a)*rr,cy+Math.sin(a)*rr*.9])}return p};
-  const path=p=>{ctx.beginPath();ctx.moveTo(p[0][0],p[0][1]);for(let i=1;i<p.length;i++)ctx.lineTo(p[i][0],p[i][1]);ctx.closePath()};
-  ctx.globalCompositeOperation="multiply";
-  const nW=Math.round(P.washes),layers=Math.round(P.layers),items=[];
+  const ctx=cv.getContext("2d"),R=rngFor(P.seed,"wc2"),S=(R()*1e6)|0,m=Math.min(W,H),pal=PAL[P.palette].map(([c,g])=>[L3(c),g]);
+  const gauss=()=>{let u=0;while(!u)u=R();return Math.sqrt(-2*Math.log(u))*Math.cos(TAU*R())};
+  const deform=(p,depth,vr)=>{for(let d=0;d<depth;d++){const q=[];for(let i=0;i<p.length;i++){const a=p[i],b=p[(i+1)%p.length],l=Math.hypot(b[0]-a[0],b[1]-a[1]);q.push(a,[(a[0]+b[0])/2+gauss()*vr*l,(a[1]+b[1])/2+gauss()*vr*l])}p=q}return p};
+  const blob=(cx,cy,rx,ry,n)=>{const p=[],ph=R()*TAU;for(let i=0;i<n;i++){const a=ph+i/n*TAU,rr=.75+.5*R();p.push([cx+Math.cos(a)*rx*rr,cy+Math.sin(a)*ry*rr])}return p};
+  const off=document.createElement("canvas");off.width=W;off.height=H;const oc=off.getContext("2d");
+  const ph=paperHeight(W,H,S,1),pl=paperLight(ph,W,H,1.1),Ab=new Float32Array(W*H*3);
+  const nW=Math.round(P.washes),layers=Math.round(P.layers);
   for(let w=0;w<nW;w++){
-    const cx=W*(.12+.76*R()),cy=H*(.12+.76*R()),r=m*(.13+.2*R())*(w<2?1.5:1),c=pal[(R()*pal.length)|0],
-      hh=c[0]+(R()-.5)*14,ss=c[1],ll=c[2]+(R()-.5)*10;
-    const base=deform(blob(cx,cy,r,9),3,.2);
-    for(let l=0;l<layers;l++){
-      const p=deform(base,3,.09+.05*R());
-      ctx.fillStyle="hsla("+hh+","+ss+"%,"+(ll+8)+"%,"+(.028+.014*R())+")";path(p);ctx.fill();
-      if(l%3===0){ctx.strokeStyle="hsla("+hh+","+ss+"%,"+(ll-8)+"%,.05)";ctx.lineWidth=m*.0016*(.6+R());ctx.stroke()}}
-    items.push([cx,cy,r,hh,ss,ll])}
-  for(const [cx,cy,r,hh,ss,ll] of items){
-    const nb=Math.round(P.bleed*5);
-    for(let b=0;b<nb;b++){const a=R()*TAU,d=r*(.9+.5*R()),bx=cx+Math.cos(a)*d,by=cy+Math.sin(a)*d,br=r*(.12+.2*R());
-      const p=deform(blob(bx,by,br,7),3,.25);for(let l=0;l<8;l++){ctx.fillStyle="hsla("+hh+","+ss+"%,"+(ll+12)+"%,.05)";path(deform(p,2,.15));ctx.fill()}}
-    const ns=Math.round(P.splatter*34);
-    for(let s=0;s<ns;s++){const a=R()*TAU,d=r*(.8+R()*1.4),sr=m*.0025*(.4+R()*2.2);ctx.fillStyle="hsla("+hh+","+ss+"%,"+(ll-4)+"%,"+(.25+.3*R())+")";ctx.beginPath();ctx.arc(cx+Math.cos(a)*d,cy+Math.sin(a)*d,sr,0,TAU);ctx.fill()}}
-  ctx.globalCompositeOperation="source-over";
-  const img=ctx.getImageData(0,0,W,H),d=img.data,f=18/m;
-  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=(y*W+x)*4,g=1-(.5*fbm2(x*f*3,y*f*3,S,3)+.5*hash2(x,y,S))*.11+.04;
-    d[i]=clamp(d[i]*g,0,255);d[i+1]=clamp(d[i+1]*g,0,255);d[i+2]=clamp(d[i+2]*g*.995,0,255)}
-  ctx.putImageData(img,0,0);return P.palette+" · "+nW+" washes"}
+    const big=w<2,cx=W*(.1+.8*R()),cy=H*(.1+.8*R()),r=m*(big?.3+.15*R():.1+.17*R()),[pig,gr]=pal[(R()*pal.length)|0];
+    oc.clearRect(0,0,W,H);oc.fillStyle="#fff";
+    const base=deform(blob(cx,cy,r*(1+.5*R()),r*(.7+.4*R()),10),3,.22);
+    const la=1.6/layers;oc.globalAlpha=la;
+    for(let l=0;l<layers;l++){const p=deform(base,3,.1+.06*R());oc.beginPath();oc.moveTo(p[0][0],p[0][1]);for(const q of p)oc.lineTo(q[0],q[1]);oc.closePath();oc.fill()}
+    // splatter flicked from the brush
+    const ns=Math.round(P.splatter*40*(big?.5:1));oc.globalAlpha=.42;
+    for(let s=0;s<ns;s++){const a=R()*TAU,dd=r*(.9+R()*1.3),sr=m*.0022*(.4+Math.pow(R(),2)*4);oc.beginPath();oc.arc(cx+Math.cos(a)*dd,cy+Math.sin(a)*dd*.8,sr,0,TAU);oc.fill()}
+    oc.globalAlpha=1;
+    const a=oc.getImageData(0,0,W,H).data,A=new Float32Array(W*H);for(let i=0;i<W*H;i++)A[i]=Math.min(1,a[i*4+3]/255*1.05);
+    pigmentLayer(Ab,A,W,H,pig,{S:S+w*97,ph,gran:gr*.8,edge:2.2+1.6*R(),edgeR:.005,mottleF:2+3*R(),bloom:R()<P.bleed*.8?.8:0,bloomF:4+4*R(),bloomT:.56+.06*R(),strength:big?.55+.4*R():.8+.6*R()});
+    // soft bleed: pigment wandering into damp paper next to the wash
+    if(R()<P.bleed){oc.clearRect(0,0,W,H);oc.globalAlpha=.5;const bx=cx+(R()-.5)*r*1.6,by=cy+(R()-.5)*r*1.6;
+      for(let l=0;l<10;l++){const p=deform(blob(bx,by,r*.5,r*.45,8),4,.2);oc.beginPath();oc.moveTo(p[0][0],p[0][1]);for(const q of p)oc.lineTo(q[0],q[1]);oc.closePath();oc.fill()}
+      oc.globalAlpha=1;const b=oc.getImageData(0,0,W,H).data;let Bm=new Float32Array(W*H);for(let i=0;i<W*H;i++)Bm[i]=b[i*4+3]/255;Bm=boxBlur(boxBlur(Bm,W,H,Math.round(m*.02)),W,H,Math.round(m*.02));
+      const [p2,g2]=pal[(R()*pal.length)|0];pigmentLayer(Ab,Bm,W,H,p2,{S:S+w*31+7,ph,gran:g2*.8,edge:.6,mottleF:3,strength:.6})}}
+  developPaper(ctx,Ab,W,H,L3([247,243,233]),ph,pl);
+  return P.palette+" · "+nW+" washes"}
 const PL=[["Cobalt","Cobalt"],["Sunset","Sunset"],["Forest","Forest"],["Rose","Rose"],["Sepia","Sepia"]];
-const CFG={id:"watercolor",title:"Watercolor",lead:"Translucent washes built from dozens of wobbling, slightly different layers, with darker pooled edges, soft bleeds, splatter and the grain of cotton paper. The seed decides where the paint falls.",
+const CFG={id:"watercolor",title:"Watercolor",lead:"Transparent pigment on cold-press paper. Each wash is built from dozens of wobbling layers, then the paint behaves like paint: it pools darker at the drying edge, settles into the paper grain, glazes over earlier washes and sometimes blooms back into cauliflower edges. The seed decides where the brush goes.",
   mainW:960,thumbW:300,render,
-  sliders:[{k:"washes",label:"Washes",min:3,max:14,step:1,v:7},{k:"layers",label:"Layers",min:12,max:50,step:1,v:28},{k:"bleed",label:"Bleed",min:0,max:1,step:.01,v:.5,fmt:v=>Math.round(v*100)+"%"},{k:"splatter",label:"Splatter",min:0,max:1,step:.01,v:.35,fmt:v=>Math.round(v*100)+"%"}],
+  sliders:[{k:"washes",label:"Washes",min:2,max:12,step:1,v:6},{k:"layers",label:"Layers",min:10,max:40,step:1,v:24},{k:"bleed",label:"Bleed",min:0,max:1,step:.01,v:.5,fmt:v=>Math.round(v*100)+"%"},{k:"splatter",label:"Splatter",min:0,max:1,step:.01,v:.35,fmt:v=>Math.round(v*100)+"%"}],
   segs:[{k:"palette",label:"Palette",v:"Cobalt",opts:PL}],
   strips:[{title:"Palette",sub:"Five pigment sets, same seed.",k:"palette",opts:PL},
-          {title:"Washes",sub:"From one quiet stain to a busy sheet.",k:"washes",opts:[["3",3],["6",6],["9",9],["13",13]]}]};
+          {title:"Washes",sub:"From one quiet stain to a busy sheet.",k:"washes",opts:[["2",2],["5",5],["8",8],["12",12]]}]};
 startLab(CFG);
 </script>
 </body>
