@@ -9,7 +9,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Paste paper · swirlseed labs</title>
-<meta name="description" content="Combed and stamped decorative paste paper generated from a seed string.">
+<meta name="description" content="Combed and stamped decorative paste paper with paste relief, generated from a seed string.">
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <style>
 :root{--ink:#14151a;--page:#eeeef0}
@@ -121,36 +121,67 @@ function startLab(CFG){
   window.__lab={state,renderTo};
   sync();draw();strips();
 }
-const PC={Indigo:[[28,44,112],[214,222,238]],Terracotta:[[168,62,38],[240,218,190]],Forest:[[30,92,70],[226,232,204]],Plum:[[96,34,92],[238,214,224]]};
+// cold-press paper: height field (0..1) and a lit version for emboss shading
+function paperHeight(W,H,S,scale){const h=new Float32Array(W*H),m=Math.min(W,H)/ (scale||1);
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const u=x/m,v=y/m;h[y*W+x]=.5*fbm2(u*26,v*26,S+101,3)+.3*fbm2(u*70,v*70,S+102,2)+.2*hash2(x,y,S+103)}return h}
+function paperLight(h,W,H,k){const L=new Float32Array(W*H);for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x,xm=x>0?h[i-1]:h[i],ym=y>0?h[i-W]:h[i];L[i]=1+((h[i]-xm)*.7+(h[i]-ym)*.7)*k}return L}
+function boxBlur(a,W,H,r){if(r<1)return a;const t=new Float32Array(W*H),o=new Float32Array(W*H),n=2*r+1;
+  for(let y=0;y<H;y++){let s=0;const row=y*W;for(let x=-r;x<=r;x++)s+=a[row+clamp(x,0,W-1)];for(let x=0;x<W;x++){t[row+x]=s/n;s+=a[row+Math.min(W-1,x+r+1)]-a[row+Math.max(0,x-r)]}}
+  for(let x=0;x<W;x++){let s=0;for(let y=-r;y<=r;y++)s+=t[clamp(y,0,H-1)*W+x];for(let y=0;y<H;y++){o[y*W+x]=s/n;s+=t[Math.min(H-1,y+r+1)*W+x]-t[Math.max(0,y-r)*W+x]}}return o}
+// one layer of transparent pigment: A = water/pigment coverage (0..1); adds absorbance into Ab (rgb interleaved)
+function pigmentLayer(Ab,A,W,H,pig,o){
+  const m=Math.min(W,H),S=o.S|0,k=pig.map(c=>-Math.log(clamp(c,.02,.999))),Ab1=boxBlur(boxBlur(A,W,H,Math.max(1,Math.round(m*(o.edgeR||.006)))),W,H,Math.max(1,Math.round(m*(o.edgeR||.006))));
+  const fq=o.mottleF||3;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x,a=A[i];if(a<.003)continue;
+    const u=x/m,v=y/m,edge=Math.max(0,a-Ab1[i]),mot=.8+.4*fbm2(u*fq+S*.001,v*fq,S+11,4);
+    let D=a*mot+edge*(o.edge||2.4);
+    if(o.bloom){const n=fbm2(u*(o.bloomF||5),v*(o.bloomF||5),S+21,5),t=o.bloomT||.58,b=sstep(t,t+.015,n);D*=1-.3*b*a;D+=a*.55*o.bloom*Math.exp(-Math.pow((n-t)/.007,2))}
+    const g=o.ph?(1-(o.gran||.5)+(o.gran||.5)*2*o.ph[i]*(.6+.4*fbm2(u*40,v*40,S+31,2))):1;D*=g*(o.strength||1);
+    Ab[i*3]+=D*k[0];Ab[i*3+1]+=D*k[1];Ab[i*3+2]+=D*k[2]}}
+function developPaper(ctx,Ab,W,H,paper,ph,pl){const img=ctx.createImageData(W,H),d=img.data;
+  for(let i=0;i<W*H;i++){const l=pl?pl[i]:1,o=i*4;d[o]=enc(paper[0]*Math.exp(-Ab[i*3])*l);d[o+1]=enc(paper[1]*Math.exp(-Ab[i*3+1])*l);d[o+2]=enc(paper[2]*Math.exp(-Ab[i*3+2])*l);d[o+3]=255}
+  ctx.putImageData(img,0,0)}
 const L3=a=>a.map(c=>Math.pow(c/255,2.2));
+const PC={Indigo:[[24,40,110],[236,230,214]],Terracotta:[[160,58,34],[242,228,204]],Forest:[[26,84,62],[236,232,210]],Plum:[[92,32,86],[240,226,222]],Ochre:[[190,130,30],[244,236,220]]};
 function render(cv,P,W,H){
-  const ctx=cv.getContext("2d"),img=ctx.createImageData(W,H),d=img.data,R=rngFor(P.seed,"paste"),S=(R()*1e6)|0,asp=W/H,ox=R()*30,oy=R()*30,ph=R()*TAU,pal=PC[P.colour],dk=L3(pal[0]),lt=L3(pal[1]),F=P.comb,A=P.wave,pat=P.pattern,rot=R()*.8-.4;
-  const cxs=[R()*asp,R()*asp,R()*asp],cys=[R(),R(),R()];
-  const cr=Math.cos(rot),sr=Math.sin(rot);
-  for(let y=0;y<H;y++){const v0=y/H;for(let x=0;x<W;x++){
-    let u=x/H,v=v0,m;
-    const wu=fbm2(u*1.6+ox,v*1.6+oy,S,3)-.5,wv=fbm2(u*1.6+oy,v*1.6+ox,S+9,3)-.5;
-    if(pat==="Waves"){const t=v+A*(.07*Math.sin(u*9+ph)+.05*Math.sin(u*17+ph*2))+wu*A*.15;m=.5+.5*Math.sin(t*F*TAU)}
-    else if(pat==="Combed"){const uu=u*cr+v*sr,vv=-u*sr+v*cr,t=uu+A*(.22*Math.sin(vv*5+ph)+.12*Math.sin(vv*11+ph*3))+wu*A*.35;m=.5+.5*Math.sin(t*F*TAU)*(.7+.3*Math.sin(t*F*TAU*.33+ph))}
-    else if(pat==="Swirl"){let best=1e9,ang=0,rr=0;for(let k=0;k<3;k++){const dx=u-cxs[k],dy=v-cys[k],r2=dx*dx+dy*dy;if(r2<best){best=r2;ang=Math.atan2(dy,dx);rr=Math.sqrt(r2)}}
-      const t=rr*F*1.1+ang/TAU*2+A*.6*wu*3;m=.5+.5*Math.sin(t*TAU)}
-    else{const g=F*.55,uu=(u*cr+v*sr)*g+wu*A*1.2,vv=(-u*sr+v*cr)*g+wv*A*1.2,fx=Math.floor(uu),fy=Math.floor(vv);let dm=9;
-      for(let j=-1;j<=1;j++)for(let i=-1;i<=1;i++){const cx=fx+i+.2+.6*hash2(fx+i,fy+j,S),cy=fy+j+.2+.6*hash2(fx+i,fy+j,S+3),dd=Math.hypot(uu-cx,vv-cy);if(dd<dm)dm=dd}
-      m=1-sstep(.25,.38,dm)}
-    m=sstep(.3,.7,m);
-    const sx=vnoise(x*.004+ox,y*.9,S+2)*.55+vnoise(x*.02,y*2.2,S+3)*.45,streak=(sx-.5)*P.streak*.9,g=(hash2(x,y,S)-.5)*.05+(fbm2(x/H*12,y/H*12,S+6,3)-.5)*.06;
-    const k=clamp(m+streak*.6,0,1),dens=lerp(.55,1.05,k);
-    const i=(y*W+x)*4;let r=lt[0]+(dk[0]*.45+lt[0]*.55-lt[0])*0,gg,b;
-    const th=clamp(.18+.82*k+streak*.5,0,1);
-    r=lerp(lt[0],dk[0],th*dens)+g*.2;gg=lerp(lt[1],dk[1],th*dens)+g*.2;b=lerp(lt[2],dk[2],th*dens)+g*.2;
-    d[i]=enc(r);d[i+1]=enc(gg);d[i+2]=enc(b);d[i+3]=255}}
+  const ctx=cv.getContext("2d"),R=rngFor(P.seed,"paste2"),S=(R()*1e6)|0,m=Math.min(W,H),pal=PC[P.colour],pig=L3(pal[0]),paper=L3(pal[1]),pat=P.pattern;
+  const F=P.comb,A=P.wave,ox=R()*40,oy=R()*40,ph=R()*TAU,ph2=R()*TAU,rot=(R()-.5)*.35,cr=Math.cos(rot),sr=Math.sin(rot);
+  const T=new Float32Array(W*H);
+  const cxs=[],cys=[];for(let k=0;k<5;k++){cxs.push(R()*W/m);cys.push(R()*H/m)}
+  // groove profile: d = distance from groove centre in [0,.5] of one comb period
+  const groove=(f,jit)=>{const q=Math.abs(f-Math.floor(f)-.5),gw=.16+jit,g=1-sstep(gw-.05,gw+.03,.5-q),rd=.5-q-gw;return[g,Math.exp(-Math.pow((rd-.04)/.05,2))]};
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const u=x/m,v=y/m,i=y*W+x;
+    // paste brushed on in long strokes: thickness varies along the brush direction
+    const bx=u*cr+v*sr,by=-u*sr+v*cr,brush=.85+.42*(vnoise(bx*2.5+ox,by*90,S)*.6+vnoise(bx*9,by*260,S+1)*.4-.5)*P.streak*2;
+    const jit=(fbm2(u*6,v*6,S+3,3)-.5)*.14+(fbm2(u*30,v*30,S+4,2)-.5)*.05,tooth=.5+.5*Math.sin((u*.0+v*0)+0);
+    let t=brush,g1=0,r1=0,g2=0,r2=0,phase=0;
+    if(pat==="Waves"){phase=(by+A*(.06*Math.sin(bx*7+ph)+.035*Math.sin(bx*15+ph2))+(fbm2(u*1.5,v*1.5,S+5,3)-.5)*A*.12)*F;[g1,r1]=groove(phase,jit)}
+    else if(pat==="Basket"){const p1=(bx+A*.03*Math.sin(by*9+ph))*F,p2=(by+A*.03*Math.sin(bx*9+ph2))*F,blk=Math.floor(bx*F/4)+Math.floor(by*F/4);
+      [g1,r1]=groove((blk&1)?p1:p2,jit);phase=(blk&1)?p1:p2}
+    else if(pat==="Rings"){let s=0;for(let k=0;k<5;k++){const dd=Math.hypot(u-cxs[k],v-cys[k]);s+=Math.exp(-dd*16)}const d=-Math.log(s+1e-9)/16+(fbm2(u*3,v*3,S+7,3)-.5)*A*.1;phase=d*F*1.4;[g1,r1]=groove(phase,jit)}
+    else{// stamped: a cork pressed and lifted pulls the paste into a veined ring
+      const g=F*.5,uu=bx*g+(fbm2(u*2,v*2,S+8,2)-.5)*A,vv=by*g+(fbm2(u*2+5,v*2,S+9,2)-.5)*A,fx=Math.floor(uu),fy=Math.floor(vv);let dm=9;
+      for(let j=-1;j<=1;j++)for(let q=-1;q<=1;q++){const px=fx+q+.25+.5*hash2(fx+q,fy+j,S),py=fy+j+.25+.5*hash2(fx+q,fy+j,S+3),dd=Math.hypot(uu-px,vv-py);if(dd<dm)dm=dd}
+      const rr=.27+jit,inner=1-sstep(rr-.03,rr+.01,dm),vein=fbm2(u*60,v*60,S+12,3);g1=inner*(.55+.45*sstep(.4,.62,vein));r1=Math.exp(-Math.pow((dm-rr-.035)/.03,2))}
+    // fine teeth marks inside each groove
+    const st=Math.pow(.5+.5*Math.sin(phase*TAU*7+fbm2(u*20,v*20,S+13,2)*4),2)*(.5+vnoise(phase*40,v*3,S+14));
+    t=t*(1-.8*g1)+.38*r1+g1*.22*st;
+    T[i]=Math.max(0,t)}
+  const Tb=boxBlur(T,W,H,Math.max(1,Math.round(m*.0012))),ph_=paperHeight(W,H,S,1),pl=paperLight(ph_,W,H,.8);
+  const img=ctx.createImageData(W,H),d=img.data,k=pig.map(c=>-Math.log(c));
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x,t=Tb[i];
+    const xm=x>0?Tb[i-1]:t,ym=y>0?Tb[i-W]:t,xp=x<W-1?Tb[i+1]:t,yp=y<H-1?Tb[i+W]:t,nx=(xm-xp)*3.5,ny=(ym-yp)*3.5,nl=Math.hypot(nx,ny,1);
+    const lam=.86+(-nx*.6-ny*.75)/nl*.5,sh=Math.pow(clamp((-nx*.5-ny*.6+.62)/nl,0,1),40)*.08*t;
+    const D=t*.82*(.9+.2*ph_[i])*(.85+.3*fbm2(x/m*4,y/m*4,S+20,4)),o=i*4;
+    // paste is translucent pigment: Beer-Lambert over the paper, then the relief is lit
+    for(let c=0;c<3;c++)d[o+c]=enc((paper[c]*Math.exp(-k[c]*D)*lam+sh)*pl[i]);d[o+3]=255}
   ctx.putImageData(img,0,0);return pat+" · "+P.colour}
-const PT=[["Waves","Waves"],["Combed","Combed"],["Swirl","Swirl"],["Dots","Dots"]],CC=[["Indigo","Indigo"],["Terracotta","Terracotta"],["Forest","Forest"],["Plum","Plum"]];
-const CFG={id:"paste-paper",title:"Paste paper",lead:"The decorative endpaper made by painting starch paste over a sheet and drawing patterns through it with combs, fingers and stamps. Soft ridges of colour, dragged brush streaks and paper tooth. The seed picks the gesture.",
+const PT=[["Waves","Waves"],["Basket","Basket"],["Rings","Rings"],["Stamped","Stamped"]],CC=[["Indigo","Indigo"],["Terracotta","Terracotta"],["Forest","Forest"],["Plum","Plum"],["Ochre","Ochre"]];
+const CFG={id:"paste-paper",title:"Paste paper",lead:"The old bookbinder's endpaper: coloured starch paste brushed over a sheet, then combed, swirled or stamped while wet. The tool pushes paste aside into raised ridges, leaves teeth marks in the grooves and the brush strokes show through. The seed picks the gesture.",
   mainW:960,thumbW:300,render,
-  sliders:[{k:"comb",label:"Comb",min:3,max:22,step:.5,v:9,fmt:v=>v.toFixed(1)},{k:"wave",label:"Wave",min:0,max:1.5,step:.01,v:.8,fmt:v=>Math.round(v*100)+"%"},{k:"streak",label:"Streaks",min:0,max:1,step:.01,v:.55,fmt:v=>Math.round(v*100)+"%"}],
+  sliders:[{k:"comb",label:"Comb",min:3,max:22,step:.5,v:10,fmt:v=>v.toFixed(1)},{k:"wave",label:"Wave",min:0,max:1.5,step:.01,v:.8,fmt:v=>Math.round(v*100)+"%"},{k:"streak",label:"Brush",min:0,max:1,step:.01,v:.5,fmt:v=>Math.round(v*100)+"%"}],
   segs:[{k:"pattern",label:"Pattern",v:"Waves",opts:PT},{k:"colour",label:"Colour",v:"Indigo",opts:CC}],
-  strips:[{title:"Pattern",sub:"Wavy comb, straight comb, spiral and stamped dots.",k:"pattern",opts:PT},{title:"Colour",sub:"Four pigments over pale paper.",k:"colour",opts:CC}]};
+  strips:[{title:"Pattern",sub:"Wavy comb, basket weave, combed rings and cork stamps.",k:"pattern",opts:PT},{title:"Colour",sub:"Five pigments over cream paper.",k:"colour",opts:CC}]};
 startLab(CFG);
 </script>
 </body>
