@@ -1,0 +1,19 @@
+[package]
+name = "swirlseed-cli"
+description = "Command-line generator of fluid, glassy marbling patterns from a string seed (the `swirlseed` binary)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+keywords = ["generative", "pattern", "seed", "cli", "marbling"]
+categories = ["command-line-utilities", "graphics", "multimedia::images"]
+
+[[bin]]
+name = "swirlseed"
+path = "src/main.rs"
+
+[dependencies]
+swirlseed = { version = "0.1.0", path = "../swirlseed" }
+clap = { version = "4", features = ["derive"] }
+png = "0.17"
