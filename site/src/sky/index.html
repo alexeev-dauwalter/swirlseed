@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<!--
+  Procedural sky generator — a swirlseed labs demo (standalone, not part of the byte-exact library).
+  Author: Peter Alexeev Dauwalter <alexeev.dauwalter@41t.org>
+  Year: 2026
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Seeded sky · swirlseed labs</title>
+<meta name="description" content="A procedural sky at any hour with any amount of cloud, sun, moon phases and stars, generated from a seed string.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<style>
+:root{--ink:#14151a;--page:#eeeef0}
+*{box-sizing:border-box;margin:0}
+body{min-height:100vh;font:15px/1.4 ui-sans-serif,-apple-system,"SF Pro Display","Inter",system-ui,sans-serif;color:var(--ink);background:radial-gradient(circle,rgba(20,20,40,.13) 1px,transparent 1.6px) 0 0/22px 22px,var(--page);padding:44px 28px 36px;-webkit-font-smoothing:antialiased;overflow-x:clip}
+.wrap{max-width:1120px;margin:0 auto}
+.back{display:inline-block;margin-bottom:14px;color:#6b6a78;text-decoration:none;font-size:14px}.back:hover{color:var(--ink)}
+h1{font-size:30px;letter-spacing:-.03em;font-weight:650}
+.lead{color:#6b6a78;margin:6px 0 24px;max-width:640px}
+.frame{border-radius:28px;overflow:hidden;background:#111;line-height:0;box-shadow:0 30px 50px -24px rgba(30,20,70,.55),0 3px 8px rgba(30,20,70,.2);position:relative}
+.frame canvas{width:100%;height:auto;display:block}
+.badge{position:absolute;left:16px;top:14px;line-height:1.2;color:#fff;font-size:13px;padding:7px 12px;border-radius:999px;background:rgba(10,12,24,.35);border:1px solid rgba(255,255,255,.25);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);text-shadow:0 1px 4px rgba(0,0,0,.4)}
+.panel{margin-top:18px;background:rgba(255,255,255,.78);border:1px solid #fff;border-radius:26px;padding:20px 22px;box-shadow:0 20px 40px -24px rgba(30,20,70,.4);display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 34px}
+.field{margin:6px 0}
+.field>label,.lab{display:block;font-size:12px;font-weight:600;color:#55546a;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em}
+.field input[type=text]{width:100%;font:inherit;padding:10px 14px;border-radius:14px;border:1px solid #dcdbe6;background:#fff;outline:0}
+.field input[type=text]:focus{border-color:var(--ink)}
+.row{display:grid;grid-template-columns:78px 1fr 96px;align-items:center;gap:10px;font-size:13.5px;margin:10px 0}
+.row output{text-align:right;font-variant-numeric:tabular-nums;color:#55546a;font-size:12.5px}
+input[type=range]{width:100%;accent-color:#14151a}
+.seg{display:flex;gap:4px;background:#e6e5ee;border-radius:12px;padding:3px}
+.seg button{flex:1;border:0;background:transparent;font:inherit;font-size:13px;padding:7px 6px;border-radius:9px;cursor:pointer;color:#33323f}
+.seg button.on{background:#fff;box-shadow:0 2px 6px rgba(30,20,70,.18);font-weight:600}
+.btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;grid-column:1/-1}
+.btn{border:1px solid #fff;background:#fff;color:var(--ink);font:inherit;font-size:14px;padding:9px 18px;border-radius:999px;cursor:pointer;box-shadow:0 4px 12px -6px rgba(40,30,90,.4)}
+.btn.dark{background:var(--ink);color:#fff;border-color:var(--ink)}
+h2{font-size:20px;letter-spacing:-.02em;margin:34px 0 4px}
+.sub{color:#6b6a78;font-size:13.5px;margin-bottom:12px}
+.strip{display:grid;gap:12px}
+.strip.s8{grid-template-columns:repeat(4,minmax(0,1fr))}.strip.s5{grid-template-columns:repeat(5,minmax(0,1fr))}.strip.s4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.th{position:relative;border-radius:18px;overflow:hidden;line-height:0;cursor:pointer;background:#111;box-shadow:0 14px 24px -14px rgba(30,20,70,.5);transition:transform .25s}
+.th:hover{transform:translateY(-3px)}.th.on{outline:2px solid var(--ink);outline-offset:2px}
+.th canvas{width:100%;height:auto;display:block}
+.th span{position:absolute;left:8px;bottom:8px;line-height:1.1;font-size:11.5px;color:#fff;padding:4px 9px;border-radius:999px;background:rgba(10,12,24,.4);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+footer{margin-top:44px;color:#7a7888;font-size:13px}
+@media(max-width:760px){.panel{grid-template-columns:minmax(0,1fr)}.strip.s8,.strip.s4{grid-template-columns:repeat(2,minmax(0,1fr))}.strip.s5{grid-template-columns:repeat(2,minmax(0,1fr))}body{padding:28px 16px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="back" href="../">← swirlseed</a>
+<h1>Seeded sky</h1>
+<p class="lead">A sky at any hour with any amount of cloud, from a seed string. Same seed, same sky: cloud layout, sun and moon and stars are all derived from it.</p>
+
+<div class="frame"><canvas id="main" width="960" height="600"></canvas><div class="badge" id="badge"></div></div>
+
+<div class="panel">
+  <div>
+    <div class="field"><label for="seed">Seed</label><input type="text" id="seed" value="Hello, world!" spellcheck="false" autocomplete="off"></div>
+    <div class="row"><span>Time</span><input type="range" id="time" min="0" max="24" step="0.05"><output id="timeo"></output></div>
+    <div class="row"><span>Clouds</span><input type="range" id="cover" min="0" max="1" step="0.01"><output id="covero"></output></div>
+    <div class="row"><span>Cirrus</span><input type="range" id="cirrus" min="0" max="1" step="0.01"><output id="cirruso"></output></div>
+    <div class="row"><span>Moon</span><input type="range" id="moon" min="0" max="1" step="0.01"><output id="moono"></output></div>
+    <div class="row"><span>Haze</span><input type="range" id="haze" min="0" max="1" step="0.01"><output id="hazeo"></output></div>
+  </div>
+  <div>
+    <div class="field"><span class="lab">Cloud type</span><div class="seg" id="types"></div></div>
+    <div class="field"><span class="lab">Aspect</span><div class="seg" id="asp"></div></div>
+  </div>
+  <div class="btns"><button class="btn dark" id="play">Play the day</button><button class="btn" id="dice">Random seed</button><button class="btn" id="dl">Download PNG</button></div>
+</div>
+
+<h2>Time of day</h2><p class="sub">Same seed and clouds, eight moments. Click one to open it above.</p>
+<div class="strip s8" id="s-time"></div>
+<h2>Amount of cloud</h2><p class="sub">From a clear sky to full overcast at the selected time.</p>
+<div class="strip s5" id="s-cover"></div>
+<h2>Cloud type</h2><p class="sub">Four families of cloud at the selected time and amount.</p>
+<div class="strip s4" id="s-type"></div>
+<footer>© 2026 Peter Alexeev Dauwalter</footer>
+</div>
+
+<script>
+"use strict";
+const DEG=Math.PI/180;
+const clamp=(x,a,b)=>x<a?a:x>b?b:x;
+const sstep=(a,b,x)=>{const t=clamp((x-a)/(b-a),0,1);return t*t*(3-2*t)};
+const lerp=(a,b,t)=>a+(b-a)*t;
+
+// ---------- seeded RNG (cyrb128 + sfc32) ----------
+function cyrb128(str){let h1=1779033703,h2=3144134277,h3=1013904242,h4=2773480762;for(let i=0,k;i<str.length;i++){k=str.charCodeAt(i);h1=h2^Math.imul(h1^k,597399067);h2=h3^Math.imul(h2^k,2869860233);h3=h4^Math.imul(h3^k,951274213);h4=h1^Math.imul(h4^k,2716044179)}
+  h1=Math.imul(h3^(h1>>>18),597399067);h2=Math.imul(h4^(h2>>>22),2869860233);h3=Math.imul(h1^(h3>>>17),951274213);h4=Math.imul(h2^(h4>>>19),2716044179);return[(h1^h2^h3^h4)>>>0,(h2^h1)>>>0,(h3^h1)>>>0,(h4^h1)>>>0]}
+function sfc32(a,b,c,d){return function(){a>>>=0;b>>>=0;c>>>=0;d>>>=0;let t=(a+b)|0;a=b^(b>>>9);b=(c+(c<<3))|0;c=(c<<21|c>>>11);d=(d+1)|0;t=(t+d)|0;c=(c+t)|0;return(t>>>0)/4294967296}}
+function rngFor(seed,salt){const h=cyrb128(salt+"\u0000"+seed.normalize("NFC"));const r=sfc32(h[0],h[1],h[2],h[3]);for(let i=0;i<15;i++)r();return r}
+
+// ---------- gradient noise ----------
+const GX=[1,-1,1,-1,1,-1,0,0],GY=[1,1,-1,-1,0,0,1,-1];
+function makeNoise(rand){
+  const a=new Uint8Array(256);for(let i=0;i<256;i++)a[i]=i;
+  for(let i=255;i>0;i--){const j=(rand()*(i+1))|0;const t=a[i];a[i]=a[j];a[j]=t}
+  const p=new Uint8Array(512);for(let i=0;i<512;i++)p[i]=a[i&255];
+  function n2(x,y){
+    const xi=Math.floor(x),yi=Math.floor(y),xf=x-xi,yf=y-yi,X=xi&255,Y=yi&255;
+    const g00=p[p[X]+Y]&7,g01=p[p[X]+Y+1]&7,g10=p[p[X+1]+Y]&7,g11=p[p[X+1]+Y+1]&7;
+    const u=xf*xf*xf*(xf*(xf*6-15)+10),v=yf*yf*yf*(yf*(yf*6-15)+10);
+    const d00=GX[g00]*xf+GY[g00]*yf,d10=GX[g10]*(xf-1)+GY[g10]*yf,d01=GX[g01]*xf+GY[g01]*(yf-1),d11=GX[g11]*(xf-1)+GY[g11]*(yf-1);
+    const a0=d00+u*(d10-d00),b0=d01+u*(d11-d01);
+    return a0+v*(b0-a0);   // about -1..1
+  }
+  function fbm(x,y,oct){
+    let s=0,amp=0.5,tot=0;
+    for(let o=0;o<oct;o++){
+      s+=amp*(n2(x,y)*0.78+0.5);tot+=amp;amp*=0.5;
+      const nx=(0.8*x+0.6*y)*2.03+17.3,ny=(-0.6*x+0.8*y)*2.03+9.1;x=nx;y=ny;
+    }
+    return s/tot;
+  }
+  return {n2,fbm};
+}
+function hash2(x,y,s){let h=Math.imul(x|0,374761393)+Math.imul(y|0,668265263)+Math.imul(s|0,1274126177);h=Math.imul(h^(h>>>13),1274126177);h^=h>>>16;return(h>>>0)/4294967296}
+
+// ---------- colour tables (sRGB 0..255) ----------
+const lin=v=>Math.pow(v/255,2.2);
+const KEYS=[ // sun elevation, zenith, horizon
+  [-20,[1,2,7],[4,6,15]],
+  [-12,[4,8,26],[16,20,44]],
+  [-6,[12,24,70],[96,70,122]],
+  [-2,[26,48,116],[214,112,98]],
+  [0,[44,80,158],[255,142,84]],
+  [4,[52,92,172],[246,170,114]],
+  [10,[62,116,204],[214,204,214]],
+  [25,[52,118,220],[182,212,240]],
+  [52,[36,104,218],[166,206,243]]
+].map(k=>[k[0],k[1].map(lin),k[2].map(lin)]);
+const TW=[ // twilight glow colour by sun elevation
+  [-14,[50,44,110]],[-8,[170,84,100]],[-4,[255,104,56]],[0,[255,116,44]],[5,[255,166,86]],[14,[255,210,160]]
+].map(k=>[k[0],k[1].map(lin)]);
+const SUNC=[[-3,[255,90,40]],[0,[255,112,50]],[3,[255,150,80]],[10,[255,214,160]],[25,[255,244,225]],[60,[255,248,238]]].map(k=>[k[0],k[1].map(lin)]);
+function interp(tab,e,idx){
+  if(e<=tab[0][0])return tab[0][idx];const n=tab.length;if(e>=tab[n-1][0])return tab[n-1][idx];
+  for(let i=0;i<n-1;i++){if(e<=tab[i+1][0]){const t=sstep(tab[i][0],tab[i+1][0],e),a=tab[i][idx],b=tab[i+1][idx];return[lerp(a[0],b[0],t),lerp(a[1],b[1],t),lerp(a[2],b[2],t)]}}
+}
+function interpT(tab,e){return interp(tab,e,1)}
+
+// ---------- scene setup ----------
+const TYPES=["Cumulus","Stratocumulus","Cirrus","Stratus"];
+const TYPE_CFG=[ // soft, aMax, absorb, step
+  {soft:0.12,aMax:0.98,A:3.4,step:0.11},
+  {soft:0.16,aMax:0.95,A:2.6,step:0.13},
+  {soft:0.34,aMax:0.72,A:0.9,step:0.10},
+  {soft:0.38,aMax:0.96,A:1.3,step:0.18}];
+function sunElOf(t){return 52*Math.sin(2*Math.PI*(t-6)/24)}
+
+function makeScene(P){
+  const seed=P.seed,nz=makeNoise(rngFor(seed,"noise")),rr=rngFor(seed,"scene");
+  const S={P,nz,
+    ox:rr()*500,oy:rr()*500,
+    wind:rr()*Math.PI,az0:(rr()-0.5)*40,
+    moonInc:(rr()-0.5)*14,moonAz:(rr()-0.5)*16,
+    starSeed:(rr()*1e9)|0,mwTilt:(rr()-0.5)*0.6,};
+  return S;
+}
+
+function renderSky(S,img,W,H){
+  const P=S.P,data=img.data,{n2,fbm}=S.nz;
+  const FOVV=62,asp=W/H,tanV=Math.tan(FOVV/2*DEG),tanH=tanV*asp;
+  const sunEl=sunElOf(P.time),sunAz=S.az0*0.4+(P.time-12)*5.5;
+  const bottomEl=clamp(sunEl*0.55-4,-4,6),pitch=(FOVV/2+bottomEl)*DEG,sinP=Math.sin(pitch),cosP=Math.cos(pitch);
+  const ce0=Math.cos(sunEl*DEG),sx=ce0*Math.sin(sunAz*DEG),sy=Math.sin(sunEl*DEG),sz=ce0*Math.cos(sunAz*DEG);
+  const hn=Math.hypot(sx,sz)||1,lu=sx/hn,lv=sz/hn;
+  const Z=interp(KEYS,sunEl,1),Hc=interp(KEYS,sunEl,2);
+  const sunCol=interpT(SUNC,sunEl);
+  const twC=interpT(TW,sunEl);
+  const twI=clamp((12-sunEl)/12,0,1)*clamp((sunEl+13)/9,0,1);
+  const sunVis=sstep(-3,1.2,sunEl);                     // disc and halo
+  const dayK=sstep(-6,8,sunEl);                          // direct light on clouds/ground
+  const night=sstep(-4,-13,sunEl);
+  const cfg=TYPE_CFG[P.type],cw=Math.cos(S.wind),sw=Math.sin(S.wind);
+  const thrOf=c=>1.0-0.97*c;
+  const thrMain=thrOf(P.cover),thrCir=thrOf(0.12+0.55*P.cirrus);
+  const OX=S.ox,OY=S.oy;
+  const str=f=>clamp((f-0.5)*2.3+0.5,0,1);
+
+  function billow(x,y,oct){let sm=0,a=0.5,t=0;for(let o=0;o<oct;o++){sm+=a*(1-Math.abs(n2(x,y))*1.5);t+=a;a*=0.5;const nx=(0.8*x+0.6*y)*2.07+5.1,ny=(-0.6*x+0.8*y)*2.07+3.7;x=nx;y=ny}return sm/t}
+  function dens(type,u,v,lod){
+    const ob=lod>0.7?5:lod>0.4?4:3;
+    if(type===0){
+      const q=fbm(u*0.6+OX,v*0.6+OY,2),wu=u+(q-0.5)*0.5,wv=v+(q-0.5)*0.5;
+      const b=fbm(wu*0.8+OX,wv*0.8+OY,ob),bl=billow(wu*1.7+3.1,wv*1.7+OY,ob-1);
+      return str(b*0.58+(bl-0.13)*0.42);
+    }
+    const ru=u*cw+v*sw,rv=-u*sw+v*cw;
+    if(type===1){const q=fbm(ru*0.5+OX,rv*0.5+OY,3);return str(fbm(ru*0.62+(q-0.5)*0.9+OX,rv*1.55+(q-0.5)*0.9+OY,ob)*0.8+(billow(ru*1.9,rv*4.2+OY,ob-1)-0.13)*0.2)}
+    if(type===2){const q=fbm(ru*0.35+OX,rv*0.9+OY,3);return str(fbm(ru*0.3+(q-0.5)*1.5+OX,rv*2.0+(q-0.5)*0.5+OY,ob))}
+    return str(fbm(u*0.3+OX,v*0.3+OY,4)*0.8+fbm(u*1.2+OY,v*1.2+OX,ob-1)*0.2);
+  }
+  // moon: its own diurnal arc, shifted against the sun by the lunar cycle
+  const fCyc=P.moon,mT=(((P.time-24*fCyc)%24)+24)%24;
+  const moonEl=52*Math.sin(2*Math.PI*(mT-6)/24)+S.moonInc,moonAz=S.az0*0.4+S.moonAz+(mT-12)*5.5;
+  const mce=Math.cos(moonEl*DEG),mdx3=mce*Math.sin(moonAz*DEG),mdy3=Math.sin(moonEl*DEG),mdz3=mce*Math.cos(moonAz*DEG);
+  const mzc=mdy3*sinP+mdz3*cosP,myc=mdy3*cosP-mdz3*sinP;
+  const moonR=2.1/FOVV*H;
+  let mx=-1e5,my=-1e5;
+  if(mzc>0.05){mx=(0.5+mdx3/mzc/(2*tanH))*W;my=(0.5-myc/mzc/(2*tanV))*H}
+  const moonVis=(0.3+0.7*sstep(4,-7,sunEl))*sstep(-1.5,3,moonEl);
+  const ill=P.moon<=0.5?P.moon*2:(1-P.moon)*2,iAng=Math.PI*Math.abs(1-2*fCyc),fracLit=(1+Math.cos(iAng))/2;
+  // direction of the lit limb on screen: towards the sun
+  let Lx=0,Ly=0,Lz=1,mrot=0;
+  {const dot=sx*mdx3+sy*mdy3+sz*mdz3;let px=sx-dot*mdx3,py=sy-dot*mdy3,pz=sz-dot*mdz3;const pl=Math.hypot(px,py,pz)||1;px/=pl;py/=pl;pz/=pl;
+   const hx=px,hy=-(py*cosP-pz*sinP),hl=Math.hypot(hx,hy)||1,si=Math.sin(iAng);
+   Lx=si*hx/hl;Ly=si*hy/hl;Lz=Math.cos(iAng);
+   const zdot=mdy3;let zx=-zdot*mdx3,zy=1-zdot*mdy3,zz=-zdot*mdz3;mrot=Math.atan2(zx,zy*cosP-zz*sinP)}
+  const moonWarm=1-sstep(2,18,moonEl),mcr=Math.cos(mrot),msr=Math.sin(mrot);
+  const mwA=0.5+S.mwTilt;
+
+  let oR=0,oG=0,oB=0;
+  function skyAt(fx,fy,gm){
+    const xc=(fx-0.5)*2*tanH,yc=(0.5-fy)*2*tanV,dyr=yc*cosP+sinP,dzr=-yc*sinP+cosP,nrm=1/Math.sqrt(xc*xc+dyr*dyr+dzr*dzr);
+    const dx=xc*nrm,dz=dzr*nrm;let dy=dyr*nrm;if(dy<0.0105)dy=0.0105;
+    const el=Math.asin(dy)/DEG,az=Math.atan2(dx,dz)/DEG;
+    const cosA=clamp(dx*sx+dy*sy+dz*sz,-1,1),angD=Math.acos(cosA)/DEG;
+    const gw=Math.pow(clamp(el/80,0,1),0.5);
+    let R=Hc[0]+(Z[0]-Hc[0])*gw,G=Hc[1]+(Z[1]-Hc[1])*gw,B=Hc[2]+(Z[2]-Hc[2])*gw;
+    // haze brightens the horizon
+    const hz=P.haze*Math.exp(-el/10);
+    R+=Hc[0]*hz*0.5;G+=Hc[1]*hz*0.5;B+=Hc[2]*hz*0.5;
+    // twilight glow on the sun's side
+    let dAz=az-sunAz;
+    const gAz=Math.exp(-(dAz*dAz)/(2*36*36)),gAz2=Math.exp(-(dAz*dAz)/(2*95*95));
+    const twK=0.55+0.45*sstep(-6,0,sunEl);
+    const g1=twK*twI*gAz*Math.exp(-el/(7+8*twI))*1.0,g2=twK*twI*gAz2*Math.exp(-el/20)*0.3;
+    R+=twC[0]*(g1+g2);G+=twC[1]*(g1+g2);B+=twC[2]*(g1+g2);
+    // sun halo + disc (kept separate so clouds can attenuate it)
+    let gR=0,gG=0,gB=0;
+    if(sunVis>0){
+      const halo=(1.3*Math.exp(-angD/5.5)+0.30*Math.exp(-angD/24)+0.07*Math.exp(-angD/70))*sunVis;
+      const disc=sstep(1.25,0.85,angD)*sstep(0,1.5,sunEl+1.2)*26*sunVis;
+      const k=(halo*(1+1.6*twI)+disc)*gm;gR=sunCol[0]*k;gG=sunCol[1]*k;gB=sunCol[2]*k;
+    }
+    const dyp=dy,u=dx/dyp*1.55,v=dz/dyp*1.55,lod=sstep(0.02,0.2,dy)*0.7+0.3;
+    const base=[R,G,B];
+    let cR=R,cG=G,cB=B;let covered=0;
+    // --- cirrus layer (high, thin)
+    let a2=0;
+    const cirAmt=P.type===2?0:P.cirrus;
+    if(cirAmt>0.02){
+      const d2=dens(2,u*0.62+3.3,v*0.62+1.7,lod),m2=sstep(thrCir,thrCir+0.34,d2)*0.42*sstep(0.01,0.08,dy);
+      if(m2>0.003){
+        a2=m2;
+        const lit=0.55+0.45*Math.pow(Math.max(cosA,0),3)+0.3*dayK;
+        const k2=dayK*(0.9+1.2*Math.pow(Math.max(cosA,0),5));
+        let r2=R*0.8+sunCol[0]*k2*0.55*lit,g2c=G*0.8+sunCol[1]*k2*0.55*lit,b2=B*0.8+sunCol[2]*k2*0.55*lit;
+        r2+=twC[0]*twI*gAz*0.3*Math.exp(-el/30);g2c+=twC[1]*twI*gAz*0.3*Math.exp(-el/30);b2+=twC[2]*twI*gAz*0.3*Math.exp(-el/30);
+        cR=lerp(cR,r2,a2);cG=lerp(cG,g2c,a2);cB=lerp(cB,b2,a2);
+      }
+    }
+    // --- main layer
+    let a1=0;
+    if(P.cover>0.01){
+      let d=dens(P.type,u,v,lod);const soft=cfg.soft;
+      let m=sstep(thrMain,thrMain+soft,d)*cfg.aMax*sstep(0.012,0.07,dy);
+      if(m>0.003){
+        a1=m;
+        const t=clamp((d-thrMain)/Math.max(1-thrMain,0.15),0,1);
+        const stp=cfg.step*(1.05-0.65*clamp(sunEl/55,0,1));
+        const dS=dens(P.type,u+lu*stp,v+lv*stp,lod)*0.6+dens(P.type,u+lu*stp*2.2,v+lv*stp*2.2,lod*0.7)*0.4;
+        const L=clamp(0.55-(dS-d)*cfg.A*(P.type===3?1:1.25),0,1);
+        const core=1-(P.type===3?0.5:0.38)*t;
+        const side=Math.pow(clamp(cosA*0.5+0.5,0,1),1.6);
+        const face=1-clamp(1-sunEl/30,0,1)*(1-side)*0.75;
+        const lightK=dayK*(0.08+0.92*L*core)*face;
+        // shadowed parts take the sky's colour
+        const lum=base[0]*0.3+base[1]*0.55+base[2]*0.15;
+        const dk=P.type===3?0.56:0.68;
+        const shR=lerp(base[0],lum,0.6)*dk+0.01,shG=lerp(base[1],lum,0.6)*dk+0.01,shB=lerp(base[2],lum,0.6)*(dk+0.06)+0.014;
+        const edge=Math.pow(1-t,2.5);
+        const sil=Math.pow(Math.max(cosA,0),7)*edge*1.6*sunVis;
+        const sI=(P.type===3?0.8:1.35)*dayK;
+        let r1=shR+(sunCol[0]*sI+base[0]*0.25)*lightK+sunCol[0]*sil;
+        let g1c=shG+(sunCol[1]*sI+base[1]*0.25)*lightK+sunCol[1]*sil;
+        let b1=shB+(sunCol[2]*sI+base[2]*0.25)*lightK+sunCol[2]*sil;
+        // low sun / twilight: undersides lit warm by the glow near the horizon
+        const warm=twI*gAz*Math.exp(-el/16)*(0.35+0.5*L);
+        r1+=twC[0]*warm*0.9;g1c+=twC[1]*warm*0.9;b1+=twC[2]*warm*0.9;
+        // moonlight on clouds at night
+        const mdx=(fx*W-mx)/H,mdy=(fy*H-my)/H,mo=Math.exp(-(mdx*mdx+mdy*mdy)/0.06)*moonVis*night*0.1;
+        r1+=mo*0.6;g1c+=mo*0.7;b1+=mo*0.95;
+        // fade into the haze toward the horizon
+        const fh=Math.exp(-dy*12)*0.75;
+        r1=lerp(r1,Hc[0]*1.05,fh);g1c=lerp(g1c,Hc[1]*1.05,fh);b1=lerp(b1,Hc[2]*1.05,fh);
+        cR=lerp(cR,r1,a1);cG=lerp(cG,g1c,a1);cB=lerp(cB,b1,a1);
+      }
+    }
+    const trans=(1-a1)*(1-a2*0.55);
+    cR+=gR*trans;cG+=gG*trans;cB+=gB*trans;
+    // stars, milky way, moon
+    if(night>0.01||moonVis>0.31){
+      let sR=0,sG=0,sB=0;
+      if(night>0.01){
+        const px=Math.floor(fx*W),py=Math.floor(fy*H);
+        const h1=hash2(px,py,S.starSeed);
+        if(h1>0.9988){const b=Math.pow((h1-0.9988)/0.0012,2.4)*0.45+0.03;sR+=b*0.9;sG+=b*0.95;sB+=b}
+        const cx=Math.floor(px/3),cy=Math.floor(py/3),h2=hash2(cx,cy,S.starSeed+77);
+        if(h2>0.9855){const jx=(hash2(cx,cy,5)*2+0.5),jy=(hash2(cx,cy,9)*2+0.5),ddx=px-cx*3-jx,ddy=py-cy*3-jy;
+          const b=(0.3+(h2-0.9855)/0.0145*1.3)*Math.exp(-(ddx*ddx+ddy*ddy)/0.7);
+          const tint=hash2(cx,cy,3);sR+=b*(0.8+0.4*tint);sG+=b*0.9;sB+=b*(1.15-0.4*tint)}
+        const wy=fy-(0.16+mwA*fx*0.5+0.12),w=Math.exp(-(wy*wy)/0.02)*Math.max(0,0.15+1.1*(fbm(fx*6+S.ox,fy*6,5)-0.35));
+        sR+=0.03*w;sG+=0.034*w;sB+=0.05*w;
+        const hv=sstep(0,0.12,dy);
+        sR*=night*hv;sG*=night*hv;sB*=night*hv;
+      }
+      // moon disc
+      const mdx=fx*W-mx,mdy=fy*H-my,mr=Math.hypot(mdx,mdy);
+      let moon=0,mR=0,mG=0,mB=0;
+      if(mr<moonR*26){
+        const halo=(Math.exp(-mr/(moonR*2.2))*0.06+Math.exp(-mr/(moonR*8))*0.025)*Math.pow(fracLit,1.6);
+        mR+=halo*0.8;mG+=halo*0.88;mB+=halo;
+        if(mr<moonR+1.5){
+          const cov=clamp((moonR+0.7-mr)/1.4,0,1);
+          const nx=mdx/moonR,ny=mdy/moonR,nzz=Math.sqrt(Math.max(0,1-nx*nx-ny*ny));
+          const lit=sstep(-0.04,0.06,nx*Lx+ny*Ly+nzz*Lz);
+          const rx=nx*mcr-ny*msr,ry=nx*msr+ny*mcr;
+          const maria=0.72+0.28*sstep(0.35,0.65,fbm(rx*2.2+4,ry*2.2+9,4));
+          const crat=0.94+0.06*n2(rx*14,ry*14);
+          const b=lit*maria*crat*(0.9+0.2*nzz)*1.15;
+          const earth=0.018*(1-lit);
+          mR+=cov*(b*0.98+earth*0.5);mG+=cov*(b*(0.95-0.18*moonWarm)+earth*0.55);mB+=cov*(b*(0.9-0.4*moonWarm)+earth*0.7);
+        }
+      }
+      const tr=trans*(0.35+0.65*moonVis);
+      cR+=(sR*trans+mR*tr*moonVis);cG+=(sG*trans+mG*tr*moonVis);cB+=(sB*trans+mB*tr*moonVis);
+    }
+    oR=cR;oG=cG;oB=cB;
+  }
+
+  const exK=lerp(lerp(1,0.6,sstep(-8,-1,sunEl)),1.02,sstep(2,24,sunEl));
+  const tm=(c)=>{ // ACES-ish
+    c*=exK;const v=(c*(2.51*c+0.03))/(c*(2.43*c+0.59)+0.14);return v<0?0:v>1?1:v};
+  const inv=1/2.2;
+  for(let y=0;y<H;y++){
+    const fy=y/H;
+    for(let x=0;x<W;x++){
+      const fx=x/W;let r,g,b;
+      skyAt(fx,fy,1);r=oR;g=oG;b=oB;
+      const dn=(hash2(x,y,991)-0.5)/255;
+      const i=(y*W+x)*4;
+      data[i]=(Math.pow(tm(r),inv)+dn)*255;data[i+1]=(Math.pow(tm(g),inv)+dn)*255;data[i+2]=(Math.pow(tm(b),inv)+dn)*255;data[i+3]=255;
+    }
+  }
+}
+
+// ---------- UI ----------
+const $=s=>document.querySelector(s);
+const state={seed:"Hello, world!",time:17.6,cover:0.42,type:0,cirrus:0.12,haze:0.2,moon:0.38,aspect:1.6};
+const ASPECTS=[["16:10",1.6],["16:9",16/9],["1:1",1],["9:16",9/16]];
+const TIMES=[["Night",1],["Pre-dawn",5.4],["Sunrise",6.4],["Morning",9],["Noon",12.5],["Afternoon",15.5],["Sunset",17.6],["Dusk",18.55]];
+const COVERS=[["Clear",0],["Few",0.2],["Scattered",0.4],["Broken",0.65],["Overcast",0.95]];
+const mainC=$("#main"),mctx=mainC.getContext("2d");
+function fmtTime(t){const h=Math.floor(t)%24,m=Math.round((t-Math.floor(t))*60);return String(m===60?(h+1)%24:h).padStart(2,"0")+":"+String(m===60?0:m).padStart(2,"0")}
+function moonName(f){const n=["New","Waxing crescent","First quarter","Waxing gibbous","Full","Waning gibbous","Last quarter","Waning crescent"];return n[Math.round(f*8)%8]}
+function phase(el){return el<-12?"Night":el<-6?"Nautical twilight":el<-0.8?"Civil twilight":el<6?"Golden hour":el<30?"Day":"Midday"}
+function renderTo(canvas,P,w,h){
+  canvas.width=w;canvas.height=h;const ctx=canvas.getContext("2d"),img=ctx.createImageData(w,h);
+  renderSky(makeScene(P),img,w,h);ctx.putImageData(img,0,0);
+}
+function dims(w){return[w,Math.round(w/state.aspect)]}
+let tok=0,hiTimer=0;
+function draw(final){
+  const [w,h]=dims(final?960:Math.round(480));
+  const t=performance.now();renderTo(mainC,state,w,h);
+  $("#badge").textContent=fmtTime(state.time)+" · "+phase(sunElOf(state.time))+" · sun "+Math.round(sunElOf(state.time))+"°"+(final?" · "+Math.round(performance.now()-t)+" ms":"");
+  $("#timeo").textContent=fmtTime(state.time);$("#covero").textContent=Math.round(state.cover*100)+"%";$("#cirruso").textContent=Math.round(state.cirrus*100)+"%";$("#hazeo").textContent=Math.round(state.haze*100)+"%";$("#moono").textContent=moonName(state.moon);
+}
+function strips(){
+  const my=++tok;const jobs=[];
+  const mk=(host,list,fn,isOn)=>{const el=$(host);el.innerHTML="";list.forEach(it=>{
+    const d=document.createElement("div");d.className="th";const c=document.createElement("canvas");d.appendChild(c);const sp=document.createElement("span");sp.textContent=it[0];d.appendChild(sp);
+    d.onclick=()=>{fn(it);sync();schedule()};el.appendChild(d);jobs.push([c,fn,it,d,isOn])})};
+  mk("#s-time",TIMES,it=>{state.time=it[1]},it=>Math.abs(state.time-it[1])<0.03);
+  mk("#s-cover",COVERS,it=>{state.cover=it[1]},it=>Math.abs(state.cover-it[1])<0.02);
+  mk("#s-type",TYPES.map((n,i)=>[n,i]),it=>{state.type=it[1]},it=>state.type===it[1]);
+  let i=0;const [tw,th]=dims(320);
+  (function step(){if(my!==tok||i>=jobs.length)return;const [c,fn,it,d,isOn]=jobs[i++];
+    const P=Object.assign({},state);const probe=Object.assign({},state);
+    if(jobs.indexOf(jobs.find(j=>j[0]===c))<TIMES.length)P.time=it[1];
+    else if(i-1<TIMES.length+COVERS.length)P.cover=it[1];else P.type=it[1];
+    renderTo(c,P,tw,th);d.classList.toggle("on",isOn(it));setTimeout(step,0)})();
+}
+function schedule(){draw(false);clearTimeout(hiTimer);hiTimer=setTimeout(()=>{draw(true);strips()},220)}
+// controls
+const typeHost=$("#types"),aspHost=$("#asp");
+TYPES.forEach((n,i)=>{const b=document.createElement("button");b.textContent=n==="Stratocumulus"?"Strato-Cu":n;b.title=n;b.onclick=()=>{state.type=i;sync();schedule()};typeHost.appendChild(b)});
+ASPECTS.forEach(a=>{const b=document.createElement("button");b.textContent=a[0];b.onclick=()=>{state.aspect=a[1];sync();schedule()};aspHost.appendChild(b)});
+function sync(){
+  $("#seed").value=state.seed;["time","cover","cirrus","haze","moon"].forEach(k=>$("#"+k).value=state[k]);
+  [...typeHost.children].forEach((b,i)=>b.classList.toggle("on",i===state.type));
+  [...aspHost.children].forEach((b,i)=>b.classList.toggle("on",Math.abs(ASPECTS[i][1]-state.aspect)<0.01));
+}
+$("#seed").addEventListener("input",e=>{state.seed=e.target.value;schedule()});
+["time","cover","cirrus","haze","moon"].forEach(k=>$("#"+k).addEventListener("input",e=>{state[k]=+e.target.value;schedule()}));
+const W1=["amber","glass","tidal","velvet","neon","ember","lunar","coral","moss","indigo","opal","dusk"],W2=["river","bloom","drift","harbor","echo","canyon","aurora","orbit","silk","storm","garden","signal"];
+$("#dice").onclick=()=>{state.seed=W1[Math.random()*W1.length|0]+" "+W2[Math.random()*W2.length|0]+" "+(Math.random()*90+10|0);sync();schedule()};
+$("#dl").onclick=()=>{mainC.toBlob(b=>{const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="sky-"+(state.seed.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"seed")+"-"+fmtTime(state.time).replace(":","")+".png";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)})};
+let playing=0;
+$("#play").onclick=function(){
+  if(playing){cancelAnimationFrame(playing);playing=0;this.textContent="Play the day";schedule();return}
+  this.textContent="Stop";let last=performance.now();
+  (function loop(now){state.time=(state.time+(now-last)/1000*1.6)%24;last=now;sync();
+    const [w,h]=dims(360);renderTo(mainC,state,w,h);$("#badge").textContent=fmtTime(state.time)+" · "+phase(sunElOf(state.time));$("#timeo").textContent=fmtTime(state.time);
+    playing=requestAnimationFrame(loop)})(last);
+};
+window.__sky={state,draw,renderTo,sync,schedule};
+sync();draw(true);strips();
+</script>
+</body>
+</html>
