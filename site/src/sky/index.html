@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  Procedural sky generator — a swirlseed labs demo (standalone, not part of the byte-exact library).
+  Procedural sky generator — a demo study.
   Author: Peter Alexeev Dauwalter <alexeev.dauwalter@41t.org>
   Year: 2026
 -->
@@ -8,15 +8,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Seeded sky · swirlseed labs</title>
-<meta name="description" content="A procedural sky at any hour with any amount of cloud, sun, moon phases and stars, generated from a seed string.">
-<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<title>Seeded sky</title>
 <style>
 :root{--ink:#14151a;--page:#eeeef0}
 *{box-sizing:border-box;margin:0}
 body{min-height:100vh;font:15px/1.4 ui-sans-serif,-apple-system,"SF Pro Display","Inter",system-ui,sans-serif;color:var(--ink);background:radial-gradient(circle,rgba(20,20,40,.13) 1px,transparent 1.6px) 0 0/22px 22px,var(--page);padding:44px 28px 36px;-webkit-font-smoothing:antialiased;overflow-x:clip}
 .wrap{max-width:1120px;margin:0 auto}
-.back{display:inline-block;margin-bottom:14px;color:#6b6a78;text-decoration:none;font-size:14px}.back:hover{color:var(--ink)}
 h1{font-size:30px;letter-spacing:-.03em;font-weight:650}
 .lead{color:#6b6a78;margin:6px 0 24px;max-width:640px}
 .frame{border-radius:28px;overflow:hidden;background:#111;line-height:0;box-shadow:0 30px 50px -24px rgba(30,20,70,.55),0 3px 8px rgba(30,20,70,.2);position:relative}
@@ -50,9 +47,8 @@ footer{margin-top:44px;color:#7a7888;font-size:13px}
 </head>
 <body>
 <div class="wrap">
-<a class="back" href="../">← swirlseed</a>
 <h1>Seeded sky</h1>
-<p class="lead">A sky at any hour with any amount of cloud, from a seed string. Same seed, same sky: cloud layout, sun and moon and stars are all derived from it.</p>
+<p class="lead">A sky at any hour with any amount of cloud, from a seed string. The air is simulated: Rayleigh and Mie scattering, ozone and the earth's shadow give the blues, sunsets and twilight. Clouds are real volumes ray-marched through 3D noise, lit by the sun with multiple scattering and fading into the haze with distance. Same seed, same sky.</p>
 
 <div class="frame"><canvas id="main" width="960" height="600"></canvas><div class="badge" id="badge"></div></div>
 
@@ -120,234 +116,215 @@ function makeNoise(rand){
 }
 function hash2(x,y,s){let h=Math.imul(x|0,374761393)+Math.imul(y|0,668265263)+Math.imul(s|0,1274126177);h=Math.imul(h^(h>>>13),1274126177);h^=h>>>16;return(h>>>0)/4294967296}
 
-// ---------- colour tables (sRGB 0..255) ----------
-const lin=v=>Math.pow(v/255,2.2);
-const KEYS=[ // sun elevation, zenith, horizon
-  [-20,[1,2,7],[4,6,15]],
-  [-12,[4,8,26],[16,20,44]],
-  [-6,[12,24,70],[96,70,122]],
-  [-2,[26,48,116],[214,112,98]],
-  [0,[44,80,158],[255,142,84]],
-  [4,[52,92,172],[246,170,114]],
-  [10,[62,116,204],[214,204,214]],
-  [25,[52,118,220],[182,212,240]],
-  [52,[36,104,218],[166,206,243]]
-].map(k=>[k[0],k[1].map(lin),k[2].map(lin)]);
-const TW=[ // twilight glow colour by sun elevation
-  [-14,[50,44,110]],[-8,[170,84,100]],[-4,[255,104,56]],[0,[255,116,44]],[5,[255,166,86]],[14,[255,210,160]]
-].map(k=>[k[0],k[1].map(lin)]);
-const SUNC=[[-3,[255,90,40]],[0,[255,112,50]],[3,[255,150,80]],[10,[255,214,160]],[25,[255,244,225]],[60,[255,248,238]]].map(k=>[k[0],k[1].map(lin)]);
-function interp(tab,e,idx){
-  if(e<=tab[0][0])return tab[0][idx];const n=tab.length;if(e>=tab[n-1][0])return tab[n-1][idx];
-  for(let i=0;i<n-1;i++){if(e<=tab[i+1][0]){const t=sstep(tab[i][0],tab[i+1][0],e),a=tab[i][idx],b=tab[i+1][idx];return[lerp(a[0],b[0],t),lerp(a[1],b[1],t),lerp(a[2],b[2],t)]}}
-}
-function interpT(tab,e){return interp(tab,e,1)}
+// ---------- physical atmosphere (units: km) ----------
+const RE=6360,RA=6460,ESUN=20;
+const BR=[5.802e-3,13.558e-3,33.1e-3],BO=[0.650e-3,1.881e-3,0.085e-3];
+function sphT(px,py,pz,dx,dy,dz,r){const b=px*dx+py*dy+pz*dz,c=px*px+py*py+pz*pz-r*r,d=b*b-c;if(d<0)return -1;const s=Math.sqrt(d),t1=-b-s,t2=-b+s;return t1>0?t1:t2>0?t2:-1}
+function hitsGround(px,py,pz,dx,dy,dz){const b=px*dx+py*dy+pz*dz;if(b>0)return false;const c=px*px+py*py+pz*pz-RE*RE;return b*b-c>0}
+// optical depth (rayleigh, mie, ozone) from a point toward a direction, to the top of the atmosphere
+function odTo(px,py,pz,dx,dy,dz,n){const tm=sphT(px,py,pz,dx,dy,dz,RA);let r=0,m=0,o=0;if(tm<=0)return[0,0,0];
+  for(let i=0;i<n;i++){const a=i/n,b=(i+1)/n,t=tm*(a+b)*(a+b)/4,dt=tm*(b*b-a*a),x=px+dx*t,y=py+dy*t,z=pz+dz*t,h=Math.sqrt(x*x+y*y+z*z)-RE;
+    r+=Math.exp(-h/8)*dt;m+=Math.exp(-h/1.2)*dt;o+=Math.max(0,1-Math.abs(h-25)/15)*dt}return[r,m,o]}
+function extinct(od,mK){const me=4.4e-3*mK;return[Math.exp(-(BR[0]*od[0]+me*od[1]+BO[0]*od[2])),Math.exp(-(BR[1]*od[0]+me*od[1]+BO[1]*od[2])),Math.exp(-(BR[2]*od[0]+me*od[1]+BO[2]*od[2]))]}
+const NE=72,NA=40;
+// sky radiance LUT for a light source at elevation lightEl: index (sqrt(el/90), dAz/180)
+function buildLUT(lightEl,mK){
+  const L=new Float32Array(NE*NA*3),ce=Math.cos(lightEl*DEG),sy=Math.sin(lightEl*DEG),sz=ce,oy=RE+0.05,g=0.76,ms=3.996e-3*mK,me=4.4e-3*mK;
+  for(let ie=0;ie<NE;ie++){const u=ie/(NE-1),el=Math.max(0.4,90*u*u),cv=Math.cos(el*DEG),vy=Math.sin(el*DEG);
+    for(let ia=0;ia<NA;ia++){const az=ia/(NA-1)*Math.PI,vx=cv*Math.sin(az),vz=cv*Math.cos(az),mu=vy*sy+vz*sz;
+      const pR=3/(16*Math.PI)*(1+mu*mu),pM=3/(8*Math.PI)*((1-g*g)*(1+mu*mu))/((2+g*g)*Math.pow(1+g*g-2*g*mu,1.5));
+      const tm=sphT(0,oy,0,vx,vy,vz,RA),n=22;let r=0,gg=0,b=0,odR=0,odM=0,odO=0;
+      for(let i=0;i<n;i++){const a=i/n,c=(i+1)/n,t=tm*(a+c)*(a+c)/4,dt=tm*(c*c-a*a),x=vx*t,y=oy+vy*t,z=vz*t,h=Math.sqrt(x*x+y*y+z*z)-RE;
+        const dR=Math.exp(-h/8),dM=Math.exp(-h/1.2),dO=Math.max(0,1-Math.abs(h-25)/15);odR+=dR*dt*.5;odM+=dM*dt*.5;odO+=dO*dt*.5;
+        if(!hitsGround(x,y,z,0,sy,sz)){const ls=odTo(x,y,z,0,sy,sz,6);
+          for(let k=0;k<3;k++){const tau=BR[k]*(odR+ls[0])+me*(odM+ls[1])+BO[k]*(odO+ls[2]),T=Math.exp(-tau);
+            // single scattering + a cheap isotropic multiple-scattering term
+            const s=(BR[k]*dR*(pR+0.018)+ms*dM*(pM+0.01))*T*dt;if(k===0)r+=s;else if(k===1)gg+=s;else b+=s}}
+        odR+=dR*dt*.5;odM+=dM*dt*.5;odO+=dO*dt*.5}
+      const j=(ie*NA+ia)*3;L[j]=r*ESUN;L[j+1]=gg*ESUN;L[j+2]=b*ESUN}}
+  return L}
+function lutAt(L,el,dAz,o){const u=Math.sqrt(clamp(el,0,90)/90)*(NE-1),v=clamp(dAz/180,0,1)*(NA-1),i0=Math.min(NE-2,u|0),j0=Math.min(NA-2,v|0),fu=u-i0,fv=v-j0;
+  for(let k=0;k<3;k++){const a=L[(i0*NA+j0)*3+k],b=L[(i0*NA+j0+1)*3+k],c=L[((i0+1)*NA+j0)*3+k],d=L[((i0+1)*NA+j0+1)*3+k];o[k]=(a*(1-fv)+b*fv)*(1-fu)+(c*(1-fv)+d*fv)*fu}return o}
+const lutCache=new Map();
+function getLUT(el,mK){const key=el.toFixed(2)+"|"+mK.toFixed(2);let L=lutCache.get(key);if(!L){L=buildLUT(el,mK);if(lutCache.size>64)lutCache.clear();lutCache.set(key,L)}return L}
+// light reaching altitude h (km) from a source at elevation el, including the earth's shadow
+function lightAt(h,el,mK){const ce=Math.cos(el*DEG),sy=Math.sin(el*DEG),py=RE+h;if(hitsGround(0,py,0,0,sy,ce))return[0,0,0];return extinct(odTo(0,py,0,0,sy,ce,10),mK)}
+
+// ---------- baked tileable 3D noise for clouds ----------
+function h3(x,y,z,s){let h=Math.imul(x,374761393)+Math.imul(y,668265263)+Math.imul(z,1440662683)+Math.imul(s,1274126177);h=Math.imul(h^(h>>>13),1274126177);h^=h>>>16;return(h>>>0)/4294967296}
+function vnT(x,y,z,p,s){const xi=Math.floor(x),yi=Math.floor(y),zi=Math.floor(z),xf=x-xi,yf=y-yi,zf=z-zi,u=xf*xf*(3-2*xf),v=yf*yf*(3-2*yf),w=zf*zf*(3-2*zf);
+  const X0=((xi%p)+p)%p,Y0=((yi%p)+p)%p,Z0=((zi%p)+p)%p,X1=(X0+1)%p,Y1=(Y0+1)%p,Z1=(Z0+1)%p;
+  const a=h3(X0,Y0,Z0,s),b=h3(X1,Y0,Z0,s),c=h3(X0,Y1,Z0,s),d=h3(X1,Y1,Z0,s),e=h3(X0,Y0,Z1,s),f=h3(X1,Y0,Z1,s),g=h3(X0,Y1,Z1,s),k=h3(X1,Y1,Z1,s);
+  return lerp(lerp(lerp(a,b,u),lerp(c,d,u),v),lerp(lerp(e,f,u),lerp(g,k,u),v),w)}
+function worT(x,y,z,p,s){const xi=Math.floor(x),yi=Math.floor(y),zi=Math.floor(z);let m=9;
+  for(let k=-1;k<=1;k++)for(let j=-1;j<=1;j++)for(let i=-1;i<=1;i++){const cx=xi+i,cy=yi+j,cz=zi+k,X=((cx%p)+p)%p,Y=((cy%p)+p)%p,Z=((cz%p)+p)%p;
+    const dx=cx+h3(X,Y,Z,s)-x,dy=cy+h3(X,Y,Z,s+1)-y,dz=cz+h3(X,Y,Z,s+2)-z,d=dx*dx+dy*dy+dz*dz;if(d<m)m=d}return Math.min(1,Math.sqrt(m))}
+let TEX=null;
+function bake(){if(TEX)return TEX;const N=32,M=32,sh=new Float32Array(N*N*N),de=new Float32Array(M*M*M);
+  for(let z=0;z<N;z++)for(let y=0;y<N;y++)for(let x=0;x<N;x++){const u=x/N,v=y/N,w=z/N;
+    let pf=0,a=.5,t=0;for(let o=0;o<4;o++){const f=4<<o;pf+=a*vnT(u*f,v*f,w*f,f,7+o);t+=a;a*=.5}pf/=t;
+    const wf=1-(worT(u*4,v*4,w*4,4,31)*.625+worT(u*8,v*8,w*8,8,37)*.25+worT(u*16,v*16,w*16,16,41)*.125);
+    // perlin-worley: billowy cells with soft noise inside
+    sh[(z*N+y)*N+x]=clamp((pf-(1-wf))/(1-(1-wf)*.98)*.55+wf*.55-.1,0,1)}
+  for(let z=0;z<M;z++)for(let y=0;y<M;y++)for(let x=0;x<M;x++){const u=x/M,v=y/M,w=z/M;
+    de[(z*M+y)*M+x]=1-(worT(u*4,v*4,w*4,4,53)*.625+worT(u*8,v*8,w*8,8,59)*.25+worT(u*16,v*16,w*16,16,61)*.125)}
+  // equalise the shape field so that 'coverage' maps linearly to the share of sky
+  const eq=a=>{const h=new Float32Array(2049);for(const v of a)h[Math.min(2048,(v*2048)|0)]++;let c=0;for(let i=0;i<2049;i++){c+=h[i];h[i]=c/a.length}for(let i=0;i<a.length;i++)a[i]=h[Math.min(2048,(a[i]*2048)|0)]};
+  eq(sh);eq(de);
+  return TEX={sh,de,N,M}}
+// power-of-two texture: wrap with a bit mask instead of modulo
+function tri(T,N,x,y,z){const X=Math.floor(x),Y=Math.floor(y),Z=Math.floor(z),fx=x-X,fy=y-Y,fz=z-Z,xi=X&31,yi=Y&31,zi=Z&31,x1=(xi+1)&31,y1=(yi+1)&31,z1=(zi+1)&31,NN=1024;N=32;
+  const a=T[zi*NN+yi*N+xi],b=T[zi*NN+yi*N+x1],c=T[zi*NN+y1*N+xi],d=T[zi*NN+y1*N+x1],e=T[z1*NN+yi*N+xi],f=T[z1*NN+yi*N+x1],g=T[z1*NN+y1*N+xi],h=T[z1*NN+y1*N+x1];
+  const l0=a+(b-a)*fx,l1=c+(d-c)*fx,l2=e+(f-e)*fx,l3=g+(h-g)*fx,m0=l0+(l1-l0)*fy,m1=l2+(l3-l2)*fy;return m0+(m1-m0)*fz}
 
 // ---------- scene setup ----------
 const TYPES=["Cumulus","Stratocumulus","Cirrus","Stratus"];
-const TYPE_CFG=[ // soft, aMax, absorb, step
-  {soft:0.12,aMax:0.98,A:3.4,step:0.11},
-  {soft:0.16,aMax:0.95,A:2.6,step:0.13},
-  {soft:0.34,aMax:0.72,A:0.9,step:0.10},
-  {soft:0.38,aMax:0.96,A:1.3,step:0.18}];
+const CLOUD=[ // slab (km), horizontal period of the shape texture (km), extinction per km, detail erosion
+  {h0:1.4,h1:4.6,per:17,sig:34,ero:.36,sq:1},
+  {h0:1.2,h1:2.3,per:6,sig:30,ero:.3,sq:2.2},
+  null,
+  {h0:.5,h1:1.4,per:9,sig:7,ero:.45,sq:2.2}];
 function sunElOf(t){return 52*Math.sin(2*Math.PI*(t-6)/24)}
-
 function makeScene(P){
   const seed=P.seed,nz=makeNoise(rngFor(seed,"noise")),rr=rngFor(seed,"scene");
-  const S={P,nz,
-    ox:rr()*500,oy:rr()*500,
-    wind:rr()*Math.PI,az0:(rr()-0.5)*40,
-    moonInc:(rr()-0.5)*14,moonAz:(rr()-0.5)*16,
-    starSeed:(rr()*1e9)|0,mwTilt:(rr()-0.5)*0.6,};
-  return S;
-}
+  return {P,nz,ox:rr()*500,oy:rr()*500,wind:rr()*Math.PI,az0:(rr()-0.5)*40,moonInc:(rr()-0.5)*14,moonAz:(rr()-0.5)*16,
+    starSeed:(rr()*1e9)|0,mwTilt:(rr()-0.5)*0.6,cx:rr()*1000,cz:rr()*1000,shear:(rr()-.5)*2}}
+const HG=(g,mu)=>(1-g*g)/(4*Math.PI*Math.pow(1+g*g-2*g*mu,1.5));
 
 function renderSky(S,img,W,H){
-  const P=S.P,data=img.data,{n2,fbm}=S.nz;
+  const P=S.P,data=img.data,{n2,fbm}=S.nz,TX=bake();
   const FOVV=62,asp=W/H,tanV=Math.tan(FOVV/2*DEG),tanH=tanV*asp;
   const sunEl=sunElOf(P.time),sunAz=S.az0*0.4+(P.time-12)*5.5;
-  const bottomEl=clamp(sunEl*0.55-4,-4,6),pitch=(FOVV/2+bottomEl)*DEG,sinP=Math.sin(pitch),cosP=Math.cos(pitch);
+  const bottomEl=clamp(sunEl*0.55-1,-0.8,6),pitch=(FOVV/2+bottomEl)*DEG,sinP=Math.sin(pitch),cosP=Math.cos(pitch);
   const ce0=Math.cos(sunEl*DEG),sx=ce0*Math.sin(sunAz*DEG),sy=Math.sin(sunEl*DEG),sz=ce0*Math.cos(sunAz*DEG);
-  const hn=Math.hypot(sx,sz)||1,lu=sx/hn,lv=sz/hn;
-  const Z=interp(KEYS,sunEl,1),Hc=interp(KEYS,sunEl,2);
-  const sunCol=interpT(SUNC,sunEl);
-  const twC=interpT(TW,sunEl);
-  const twI=clamp((12-sunEl)/12,0,1)*clamp((sunEl+13)/9,0,1);
-  const sunVis=sstep(-3,1.2,sunEl);                     // disc and halo
-  const dayK=sstep(-6,8,sunEl);                          // direct light on clouds/ground
-  const night=sstep(-4,-13,sunEl);
-  const cfg=TYPE_CFG[P.type],cw=Math.cos(S.wind),sw=Math.sin(S.wind);
-  const thrOf=c=>1.0-0.97*c;
-  const thrMain=thrOf(P.cover),thrCir=thrOf(0.12+0.55*P.cirrus);
-  const OX=S.ox,OY=S.oy;
-  const str=f=>clamp((f-0.5)*2.3+0.5,0,1);
-
-  function billow(x,y,oct){let sm=0,a=0.5,t=0;for(let o=0;o<oct;o++){sm+=a*(1-Math.abs(n2(x,y))*1.5);t+=a;a*=0.5;const nx=(0.8*x+0.6*y)*2.07+5.1,ny=(-0.6*x+0.8*y)*2.07+3.7;x=nx;y=ny}return sm/t}
-  function dens(type,u,v,lod){
-    const ob=lod>0.7?5:lod>0.4?4:3;
-    if(type===0){
-      const q=fbm(u*0.6+OX,v*0.6+OY,2),wu=u+(q-0.5)*0.5,wv=v+(q-0.5)*0.5;
-      const b=fbm(wu*0.8+OX,wv*0.8+OY,ob),bl=billow(wu*1.7+3.1,wv*1.7+OY,ob-1);
-      return str(b*0.58+(bl-0.13)*0.42);
-    }
-    const ru=u*cw+v*sw,rv=-u*sw+v*cw;
-    if(type===1){const q=fbm(ru*0.5+OX,rv*0.5+OY,3);return str(fbm(ru*0.62+(q-0.5)*0.9+OX,rv*1.55+(q-0.5)*0.9+OY,ob)*0.8+(billow(ru*1.9,rv*4.2+OY,ob-1)-0.13)*0.2)}
-    if(type===2){const q=fbm(ru*0.35+OX,rv*0.9+OY,3);return str(fbm(ru*0.3+(q-0.5)*1.5+OX,rv*2.0+(q-0.5)*0.5+OY,ob))}
-    return str(fbm(u*0.3+OX,v*0.3+OY,4)*0.8+fbm(u*1.2+OY,v*1.2+OX,ob-1)*0.2);
-  }
+  const mK=1+3.5*P.haze;
+  const LS=getLUT(sunEl,mK),tmp=[0,0,0];
   // moon: its own diurnal arc, shifted against the sun by the lunar cycle
   const fCyc=P.moon,mT=(((P.time-24*fCyc)%24)+24)%24;
   const moonEl=52*Math.sin(2*Math.PI*(mT-6)/24)+S.moonInc,moonAz=S.az0*0.4+S.moonAz+(mT-12)*5.5;
   const mce=Math.cos(moonEl*DEG),mdx3=mce*Math.sin(moonAz*DEG),mdy3=Math.sin(moonEl*DEG),mdz3=mce*Math.cos(moonAz*DEG);
-  const mzc=mdy3*sinP+mdz3*cosP,myc=mdy3*cosP-mdz3*sinP;
-  const moonR=2.1/FOVV*H;
-  let mx=-1e5,my=-1e5;
-  if(mzc>0.05){mx=(0.5+mdx3/mzc/(2*tanH))*W;my=(0.5-myc/mzc/(2*tanV))*H}
-  const moonVis=(0.3+0.7*sstep(4,-7,sunEl))*sstep(-1.5,3,moonEl);
-  const ill=P.moon<=0.5?P.moon*2:(1-P.moon)*2,iAng=Math.PI*Math.abs(1-2*fCyc),fracLit=(1+Math.cos(iAng))/2;
-  // direction of the lit limb on screen: towards the sun
+  const mzc=mdy3*sinP+mdz3*cosP,myc=mdy3*cosP-mdz3*sinP,moonR=0.26/FOVV*H*2.2;
+  let mx=-1e5,my=-1e5;if(mzc>0.05){mx=(0.5+mdx3/mzc/(2*tanH))*W;my=(0.5-myc/mzc/(2*tanV))*H}
+  const iAng=Math.PI*Math.abs(1-2*fCyc),fracLit=(1+Math.cos(iAng))/2;
   let Lx=0,Ly=0,Lz=1,mrot=0;
   {const dot=sx*mdx3+sy*mdy3+sz*mdz3;let px=sx-dot*mdx3,py=sy-dot*mdy3,pz=sz-dot*mdz3;const pl=Math.hypot(px,py,pz)||1;px/=pl;py/=pl;pz/=pl;
-   const hx=px,hy=-(py*cosP-pz*sinP),hl=Math.hypot(hx,hy)||1,si=Math.sin(iAng);
-   Lx=si*hx/hl;Ly=si*hy/hl;Lz=Math.cos(iAng);
+   const hx=px,hy=-(py*cosP-pz*sinP),hl=Math.hypot(hx,hy)||1,si=Math.sin(iAng);Lx=si*hx/hl;Ly=si*hy/hl;Lz=Math.cos(iAng);
    const zdot=mdy3;let zx=-zdot*mdx3,zy=1-zdot*mdy3,zz=-zdot*mdz3;mrot=Math.atan2(zx,zy*cosP-zz*sinP)}
-  const moonWarm=1-sstep(2,18,moonEl),mcr=Math.cos(mrot),msr=Math.sin(mrot);
-  const mwA=0.5+S.mwTilt;
+  const mcr=Math.cos(mrot),msr=Math.sin(mrot),mwA=0.5+S.mwTilt;
+  // moonlight: far weaker than sun, scaled up a little the way a night photograph would show it
+  const moonIrr=moonEl>-1?3e-3*Math.pow(fracLit,1.5)*ESUN:0,LM=moonIrr>0?getLUT(Math.max(moonEl,0.5),mK):null;
+  const NIGHT=[0.9e-4,1.4e-4,2.6e-4].map(v=>v*ESUN);
+  // auto exposure from the sky brightness, like a camera
+  let lum=0;for(const e of [15,35,60])for(const a of [30,90,150]){lutAt(LS,e,a,tmp);lum+=tmp[0]*.21+tmp[1]*.72+tmp[2]*.07;if(LM){lutAt(LM,e,a,tmp);lum+=(tmp[0]*.21+tmp[1]*.72+tmp[2]*.07)*moonIrr/ESUN}}
+  lum=lum/9+NIGHT[1];const expo=clamp(0.16/lum,0.4,0.016/NIGHT[1]*1.0);
+  // sun light colour at each altitude (km), and the sky's ambient light
+  const sunL=[];for(let h=0;h<=12;h++)sunL.push(lightAt(h,sunEl,mK).map(v=>v*ESUN));
+  const moonL=[];for(let h=0;h<=12;h++)moonL.push(moonIrr>0?lightAt(h,Math.max(moonEl,0),mK).map(v=>v*moonIrr):[0,0,0]);
+  const sunAt=(h,o,tab)=>{const f=clamp(h,0,11.99),i=f|0,t=f-i;for(let k=0;k<3;k++)o[k]=tab[i][k]+(tab[i+1][k]-tab[i][k])*t;return o};
+  const amb=[0,0,0];for(const e of [20,50,80])for(const a of [0,60,120,180]){lutAt(LS,e,a,tmp);for(let k=0;k<3;k++)amb[k]+=tmp[k]/12;if(LM){lutAt(LM,e,a,tmp);for(let k=0;k<3;k++)amb[k]+=tmp[k]*moonIrr/ESUN/12}}
+  for(let k=0;k<3;k++)amb[k]+=NIGHT[k];
+  // which light shapes the clouds: the sun, or the moon at night
+  const useMoon=sunEl<-7&&moonIrr>0,ldx=useMoon?mdx3:sx,ldy=useMoon?mdy3:sy,ldz=useMoon?mdz3:sz,LT=useMoon?moonL:sunL;
+  const cfg=CLOUD[P.type],cov=P.type===2?0:P.cover,cirAmt=P.type===2?Math.max(P.cover,P.cirrus):P.cirrus;
+  const vis=60*(1-.75*P.haze);
+  const cw=Math.cos(S.wind),swd=Math.sin(S.wind);
+  const skyCol=(dx,dy,dz,o)=>{const dyc=Math.max(dy,0.0105),el=Math.asin(dyc)/DEG,hn=Math.hypot(dx,dz)||1,saz=Math.acos(clamp((dx*sx+dz*sz)/(hn*(Math.hypot(sx,sz)||1)),-1,1))/DEG;
+    lutAt(LS,el,saz,o);o[0]+=NIGHT[0];o[1]+=NIGHT[1];o[2]+=NIGHT[2];
+    if(LM){const t2=[0,0,0],maz=Math.acos(clamp((dx*mdx3+dz*mdz3)/(hn*(Math.hypot(mdx3,mdz3)||1)),-1,1))/DEG;lutAt(LM,el,maz,t2);const k=moonIrr/ESUN;o[0]+=t2[0]*k;o[1]+=t2[1]*k;o[2]+=t2[2]*k}return o};
+  const ray=(fx,fy)=>{const xc=(fx-0.5)*2*tanH,yc=(0.5-fy)*2*tanV,dyr=yc*cosP+sinP,dzr=-yc*sinP+cosP,n=1/Math.sqrt(xc*xc+dyr*dyr+dzr*dzr);return[xc*n,dyr*n,dzr*n]};
 
-  let oR=0,oG=0,oB=0;
-  function skyAt(fx,fy,gm){
-    const xc=(fx-0.5)*2*tanH,yc=(0.5-fy)*2*tanV,dyr=yc*cosP+sinP,dzr=-yc*sinP+cosP,nrm=1/Math.sqrt(xc*xc+dyr*dyr+dzr*dzr);
-    const dx=xc*nrm,dz=dzr*nrm;let dy=dyr*nrm;if(dy<0.0105)dy=0.0105;
-    const el=Math.asin(dy)/DEG,az=Math.atan2(dx,dz)/DEG;
-    const cosA=clamp(dx*sx+dy*sy+dz*sz,-1,1),angD=Math.acos(cosA)/DEG;
-    const gw=Math.pow(clamp(el/80,0,1),0.5);
-    let R=Hc[0]+(Z[0]-Hc[0])*gw,G=Hc[1]+(Z[1]-Hc[1])*gw,B=Hc[2]+(Z[2]-Hc[2])*gw;
-    // haze brightens the horizon
-    const hz=P.haze*Math.exp(-el/10);
-    R+=Hc[0]*hz*0.5;G+=Hc[1]*hz*0.5;B+=Hc[2]*hz*0.5;
-    // twilight glow on the sun's side
-    let dAz=az-sunAz;
-    const gAz=Math.exp(-(dAz*dAz)/(2*36*36)),gAz2=Math.exp(-(dAz*dAz)/(2*95*95));
-    const twK=0.55+0.45*sstep(-6,0,sunEl);
-    const g1=twK*twI*gAz*Math.exp(-el/(7+8*twI))*1.0,g2=twK*twI*gAz2*Math.exp(-el/20)*0.3;
-    R+=twC[0]*(g1+g2);G+=twC[1]*(g1+g2);B+=twC[2]*(g1+g2);
-    // sun halo + disc (kept separate so clouds can attenuate it)
-    let gR=0,gG=0,gB=0;
-    if(sunVis>0){
-      const halo=(1.3*Math.exp(-angD/5.5)+0.30*Math.exp(-angD/24)+0.07*Math.exp(-angD/70))*sunVis;
-      const disc=sstep(1.25,0.85,angD)*sstep(0,1.5,sunEl+1.2)*26*sunVis;
-      const k=(halo*(1+1.6*twI)+disc)*gm;gR=sunCol[0]*k;gG=sunCol[1]*k;gB=sunCol[2]*k;
-    }
-    const dyp=dy,u=dx/dyp*1.55,v=dz/dyp*1.55,lod=sstep(0.02,0.2,dy)*0.7+0.3;
-    const base=[R,G,B];
-    let cR=R,cG=G,cB=B;let covered=0;
-    // --- cirrus layer (high, thin)
-    let a2=0;
-    const cirAmt=P.type===2?0:P.cirrus;
-    if(cirAmt>0.02){
-      const d2=dens(2,u*0.62+3.3,v*0.62+1.7,lod),m2=sstep(thrCir,thrCir+0.34,d2)*0.42*sstep(0.01,0.08,dy);
-      if(m2>0.003){
-        a2=m2;
-        const lit=0.55+0.45*Math.pow(Math.max(cosA,0),3)+0.3*dayK;
-        const k2=dayK*(0.9+1.2*Math.pow(Math.max(cosA,0),5));
-        let r2=R*0.8+sunCol[0]*k2*0.55*lit,g2c=G*0.8+sunCol[1]*k2*0.55*lit,b2=B*0.8+sunCol[2]*k2*0.55*lit;
-        r2+=twC[0]*twI*gAz*0.3*Math.exp(-el/30);g2c+=twC[1]*twI*gAz*0.3*Math.exp(-el/30);b2+=twC[2]*twI*gAz*0.3*Math.exp(-el/30);
-        cR=lerp(cR,r2,a2);cG=lerp(cG,g2c,a2);cB=lerp(cB,b2,a2);
-      }
-    }
-    // --- main layer
-    let a1=0;
-    if(P.cover>0.01){
-      let d=dens(P.type,u,v,lod);const soft=cfg.soft;
-      let m=sstep(thrMain,thrMain+soft,d)*cfg.aMax*sstep(0.012,0.07,dy);
-      if(m>0.003){
-        a1=m;
-        const t=clamp((d-thrMain)/Math.max(1-thrMain,0.15),0,1);
-        const stp=cfg.step*(1.05-0.65*clamp(sunEl/55,0,1));
-        const dS=dens(P.type,u+lu*stp,v+lv*stp,lod)*0.6+dens(P.type,u+lu*stp*2.2,v+lv*stp*2.2,lod*0.7)*0.4;
-        const L=clamp(0.55-(dS-d)*cfg.A*(P.type===3?1:1.25),0,1);
-        const core=1-(P.type===3?0.5:0.38)*t;
-        const side=Math.pow(clamp(cosA*0.5+0.5,0,1),1.6);
-        const face=1-clamp(1-sunEl/30,0,1)*(1-side)*0.75;
-        const lightK=dayK*(0.08+0.92*L*core)*face;
-        // shadowed parts take the sky's colour
-        const lum=base[0]*0.3+base[1]*0.55+base[2]*0.15;
-        const dk=P.type===3?0.56:0.68;
-        const shR=lerp(base[0],lum,0.6)*dk+0.01,shG=lerp(base[1],lum,0.6)*dk+0.01,shB=lerp(base[2],lum,0.6)*(dk+0.06)+0.014;
-        const edge=Math.pow(1-t,2.5);
-        const sil=Math.pow(Math.max(cosA,0),7)*edge*1.6*sunVis;
-        const sI=(P.type===3?0.8:1.35)*dayK;
-        let r1=shR+(sunCol[0]*sI+base[0]*0.25)*lightK+sunCol[0]*sil;
-        let g1c=shG+(sunCol[1]*sI+base[1]*0.25)*lightK+sunCol[1]*sil;
-        let b1=shB+(sunCol[2]*sI+base[2]*0.25)*lightK+sunCol[2]*sil;
-        // low sun / twilight: undersides lit warm by the glow near the horizon
-        const warm=twI*gAz*Math.exp(-el/16)*(0.35+0.5*L);
-        r1+=twC[0]*warm*0.9;g1c+=twC[1]*warm*0.9;b1+=twC[2]*warm*0.9;
-        // moonlight on clouds at night
-        const mdx=(fx*W-mx)/H,mdy=(fy*H-my)/H,mo=Math.exp(-(mdx*mdx+mdy*mdy)/0.06)*moonVis*night*0.1;
-        r1+=mo*0.6;g1c+=mo*0.7;b1+=mo*0.95;
-        // fade into the haze toward the horizon
-        const fh=Math.exp(-dy*12)*0.75;
-        r1=lerp(r1,Hc[0]*1.05,fh);g1c=lerp(g1c,Hc[1]*1.05,fh);b1=lerp(b1,Hc[2]*1.05,fh);
-        cR=lerp(cR,r1,a1);cG=lerp(cG,g1c,a1);cB=lerp(cB,b1,a1);
-      }
-    }
-    const trans=(1-a1)*(1-a2*0.55);
-    cR+=gR*trans;cG+=gG*trans;cB+=gB*trans;
-    // stars, milky way, moon
-    if(night>0.01||moonVis>0.31){
-      let sR=0,sG=0,sB=0;
-      if(night>0.01){
-        const px=Math.floor(fx*W),py=Math.floor(fy*H);
-        const h1=hash2(px,py,S.starSeed);
-        if(h1>0.9988){const b=Math.pow((h1-0.9988)/0.0012,2.4)*0.45+0.03;sR+=b*0.9;sG+=b*0.95;sB+=b}
-        const cx=Math.floor(px/3),cy=Math.floor(py/3),h2=hash2(cx,cy,S.starSeed+77);
-        if(h2>0.9855){const jx=(hash2(cx,cy,5)*2+0.5),jy=(hash2(cx,cy,9)*2+0.5),ddx=px-cx*3-jx,ddy=py-cy*3-jy;
-          const b=(0.3+(h2-0.9855)/0.0145*1.3)*Math.exp(-(ddx*ddx+ddy*ddy)/0.7);
-          const tint=hash2(cx,cy,3);sR+=b*(0.8+0.4*tint);sG+=b*0.9;sB+=b*(1.15-0.4*tint)}
-        const wy=fy-(0.16+mwA*fx*0.5+0.12),w=Math.exp(-(wy*wy)/0.02)*Math.max(0,0.15+1.1*(fbm(fx*6+S.ox,fy*6,5)-0.35));
-        sR+=0.03*w;sG+=0.034*w;sB+=0.05*w;
-        const hv=sstep(0,0.12,dy);
-        sR*=night*hv;sG*=night*hv;sB*=night*hv;
-      }
-      // moon disc
-      const mdx=fx*W-mx,mdy=fy*H-my,mr=Math.hypot(mdx,mdy);
-      let moon=0,mR=0,mG=0,mB=0;
-      if(mr<moonR*26){
-        const halo=(Math.exp(-mr/(moonR*2.2))*0.06+Math.exp(-mr/(moonR*8))*0.025)*Math.pow(fracLit,1.6);
-        mR+=halo*0.8;mG+=halo*0.88;mB+=halo;
-        if(mr<moonR+1.5){
-          const cov=clamp((moonR+0.7-mr)/1.4,0,1);
-          const nx=mdx/moonR,ny=mdy/moonR,nzz=Math.sqrt(Math.max(0,1-nx*nx-ny*ny));
-          const lit=sstep(-0.04,0.06,nx*Lx+ny*Ly+nzz*Lz);
-          const rx=nx*mcr-ny*msr,ry=nx*msr+ny*mcr;
-          const maria=0.72+0.28*sstep(0.35,0.65,fbm(rx*2.2+4,ry*2.2+9,4));
-          const crat=0.94+0.06*n2(rx*14,ry*14);
-          const b=lit*maria*crat*(0.9+0.2*nzz)*1.15;
-          const earth=0.018*(1-lit);
-          mR+=cov*(b*0.98+earth*0.5);mG+=cov*(b*(0.95-0.18*moonWarm)+earth*0.55);mB+=cov*(b*(0.9-0.4*moonWarm)+earth*0.7);
-        }
-      }
-      const tr=trans*(0.35+0.65*moonVis);
-      cR+=(sR*trans+mR*tr*moonVis);cG+=(sG*trans+mG*tr*moonVis);cB+=(sB*trans+mB*tr*moonVis);
-    }
-    oR=cR;oG=cG;oB=cB;
-  }
+  // ---- low cloud layer: volumetric ray march at half resolution ----
+  const W2=Math.ceil(W/2)+1,H2=Math.ceil(H/2)+1,CB=new Float32Array(W2*H2*4);for(let i=3;i<CB.length;i+=4)CB[i]=1;
+  if(cfg&&cov>0.005){
+    const q=W>=700?1:W>=400?.75:.5,NS=Math.round(64*q*(P.type===3?.4:P.type===1?.75:1)),sig=cfg.sig,per=cfg.per,N=TX.N,M=TX.M,sc=N/per,dsc=M/1.6,thick=cfg.h1-cfg.h0;
+    const lsteps=(q<1||P.type===3?[.08,.3,1]:[.05,.14,.32,.7,1.4]).map(v=>v*thick/3),pc=[0,0,0],NL=lsteps.length;
+    const wmap=(x,z)=>{const w=fbm(x/38+S.ox,z/38+S.oy,3);return clamp(cov+(w-.5)*.55*(1-cov*.6),0,1)};
+    const shape=(x,y,z,wc)=>{const hf=(y-cfg.h0)/thick;if(hf<0||hf>1)return 0;
+      let prof;if(P.type===0)prof=sstep(0,.07,hf)*sstep(1,.45,hf)*.6+sstep(0,.07,hf)*.4*(1-hf);else prof=sstep(0,.15,hf)*sstep(1,.6,hf);
+      const xs=x+S.cx+hf*S.shear,zs=z+S.cz,rx=xs*cw+zs*swd,rz=-xs*swd+zs*cw;
+      const b1=tri(TX.sh,N,rx*sc,y*sc*(P.type===0?1.3:1),rz*sc/cfg.sq)*.68;if((b1+.32)*prof<=1-wc)return 0;const b=b1+tri(TX.sh,N,rx*sc*3.7+17,y*sc*3.7,rz*sc*3.7/cfg.sq+5)*.32;
+      return clamp((b*prof-(1-wc))/Math.max(wc,.05),0,1)};
+    for(let j=0;j<H2;j++)for(let i=0;i<W2;i++){
+      const [dx,dy,dz]=ray(Math.min(1,i*2/W),Math.min(1,j*2/H)),o=(j*W2+i)*4;CB[o+3]=1;
+      if(dy<0.004)continue;
+      const oy=RE+0.02,t0=sphT(0,oy,0,dx,dy,dz,RE+cfg.h0),t1=sphT(0,oy,0,dx,dy,dz,RE+cfg.h1);
+      if(t0<0||t0>140)continue;const te=Math.min(t1,t0+(P.type===0?16:P.type===3?7:12));
+      const mu=dx*ldx+dy*ldy+dz*ldz,ph0=HG(.75,mu)*.7+HG(-.25,mu)*.3,ph1=HG(.4,mu)*.7+HG(-.15,mu)*.3,ph2=1/(4*Math.PI);
+      let T=1,r=0,g=0,b=0,tw=0,ww=0,miss=0,tauC=-1,hits=0;const dt=(te-t0)/NS;let t=t0+dt*(.25+.5*hash2(i,j,77));
+      const wc=wmap(dx*(t0+te)/2,dz*(t0+te)/2);
+      for(let s=0;s<NS&&T>0.012;s++,t+=dt){
+        const x=dx*t,z=dz*t,y=Math.sqrt(x*x+(oy+dy*t)*(oy+dy*t)+z*z)-RE;
+        let d=shape(x,y,z,wc);if(d<=0){if(miss++>1){t+=dt;s++}continue}miss=0;
+        const hf=(y-cfg.h0)/thick,det=tri(TX.de,M,x*dsc,y*dsc,z*dsc);
+        d=clamp((d-det*cfg.ero*(1-d))/(1-det*cfg.ero*.5),0,1);if(d<=0.002)continue;
+        const sg=d*sig;
+        // light march toward the source
+        let tau=tauC;if(tau<0||(hits++&1)===0){tau=0;for(let k=0;k<NL;k++){const l=lsteps[k],dl=k?lsteps[k]-lsteps[k-1]:lsteps[0];tau+=shape(x+ldx*l,y+ldy*l,z+ldz*l,wc)*sig*dl}tauC=tau}
+        sunAt(y,pc,LT);
+        // multiple scattering approximated by octaves of weaker extinction and flatter phase
+        const E=Math.exp(-tau)*ph0+.5*Math.exp(-tau*.25)*ph1+.25*Math.exp(-tau*.06)*ph2,powder=1-Math.exp(-sg*.35);
+        const lk=E*(.5+.5*powder),ak=(.25+.75*hf)*(.6+.4*powder);
+        const sr=pc[0]*lk+amb[0]*ak*1.15,sgc=pc[1]*lk+amb[1]*ak*1.15,sb=pc[2]*lk+amb[2]*ak*1.15;
+        const a=1-Math.exp(-sg*dt);r+=T*sr*a;g+=T*sgc*a;b+=T*sb*a;tw+=T*a*t;ww+=T*a;T*=1-a}
+      if(ww>0){// aerial perspective: distant clouds sink into the haze colour of the sky
+        const tav=tw/ww,el=Math.asin(dy)/DEG,saz=Math.acos(clamp((dx*sx+dz*sz)/(Math.hypot(dx,dz)*Math.hypot(sx,sz)||1),-1,1))/DEG;
+        skyCol(dx,dy,dz,tmp);const fog=Math.exp(-tav/vis),cvr=1-T;
+        r=r*fog+tmp[0]*(1-fog)*cvr;g=g*fog+tmp[1]*(1-fog)*cvr;b=b*fog+tmp[2]*(1-fog)*cvr}
+      CB[o]=r;CB[o+1]=g;CB[o+2]=b;CB[o+3]=T}}
 
-  const exK=lerp(lerp(1,0.6,sstep(-8,-1,sunEl)),1.02,sstep(2,24,sunEl));
-  const tm=(c)=>{ // ACES-ish
-    c*=exK;const v=(c*(2.51*c+0.03))/(c*(2.43*c+0.59)+0.14);return v<0?0:v>1?1:v};
-  const inv=1/2.2;
-  for(let y=0;y<H;y++){
-    const fy=y/H;
-    for(let x=0;x<W;x++){
-      const fx=x/W;let r,g,b;
-      skyAt(fx,fy,1);r=oR;g=oG;b=oB;
-      const dn=(hash2(x,y,991)-0.5)/255;
-      const i=(y*W+x)*4;
-      data[i]=(Math.pow(tm(r),inv)+dn)*255;data[i+1]=(Math.pow(tm(g),inv)+dn)*255;data[i+2]=(Math.pow(tm(b),inv)+dn)*255;data[i+3]=255;
-    }
-  }
+  if(cfg&&cov>0.005){const C2=new Float32Array(CB.length);for(let j=0;j<H2;j++)for(let i=0;i<W2;i++)for(let k=0;k<4;k++){let s=0,w=0;
+      for(let b=-1;b<=1;b++)for(let a=-1;a<=1;a++){const ii=i+a,jj=j+b;if(ii<0||jj<0||ii>=W2||jj>=H2)continue;const ww=(2-Math.abs(a))*(2-Math.abs(b));s+=CB[(jj*W2+ii)*4+k]*ww;w+=ww}C2[(j*W2+i)*4+k]=s/w}CB.set(C2)}
+  const CB2=new Float32Array(W2*H2);
+  // ---- sky + cirrus at half resolution (both are smooth), stored in SB ----
+  const SB=new Float32Array(W2*H2*3),night=sstep(-4,-14,sunEl);
+  for(let j=0;j<H2;j++)for(let i=0;i<W2;i++){const [dx,dy,dz]=ray(Math.min(1,i*2/W),Math.min(1,j*2/H));
+    skyCol(dx,dy,dz,tmp);let R=tmp[0],G=tmp[1],B=tmp[2];const dyc=Math.max(dy,0.0105),el=Math.asin(dyc)/DEG;
+    const hg=Math.exp(-el/6)*night;R+=hg*NIGHT[0]*1.6;G+=hg*NIGHT[1]*1.3;B+=hg*NIGHT[2]*.9;
+    let cT=1;
+    if(cirAmt>0.02&&dy>0.01){const t=sphT(0,RE+.02,0,dx,dy,dz,RE+9);if(t>0&&t<400){
+      const u=dx*t/14,v=dz*t/14,ru=u*cw+v*swd,rv=-u*swd+v*cw,qq=fbm(ru*0.35+S.ox,rv*0.9+S.oy,3);
+      let d=fbm(ru*0.3+(qq-0.5)*1.5+S.ox,rv*1.3+(qq-0.5)*0.5+S.oy,6);d=clamp((d-(1-.8*cirAmt))*2.6,0,1)*(.6+.4*fbm(ru*3,rv*7,3));
+      const tau=d*.55*Math.min(1,cirAmt*2);if(tau>0.002){cT=Math.exp(-tau);const mu=dx*ldx+dy*ldy+dz*ldz,t3=[0,0,0];sunAt(9,t3,LT);
+        const ph=HG(.7,mu)*.7+HG(.1,mu)*.3,a=1-cT,fog=Math.exp(-t/(vis*3));const s0=t3[0]*ph*1.2+amb[0]*.9,s1=t3[1]*ph*1.2+amb[1]*.9,s2=t3[2]*ph*1.2+amb[2]*.9;
+        R=R*cT+(s0*fog+tmp[0]*(1-fog))*a;G=G*cT+(s1*fog+tmp[1]*(1-fog))*a;B=B*cT+(s2*fog+tmp[2]*(1-fog))*a}}}
+    const o=(j*W2+i)*3;SB[o]=R;SB[o+1]=G;SB[o+2]=B;
+    // the cirrus veil also dims what is behind it: fold it into the cloud transmittance of the back layer
+    CB2[(j*W2+i)]=cT}
+  // ---- full-resolution pass: sky, sun, stars, moon, cirrus, then the cloud buffer ----
+  const TMN=4096,TML=new Float32Array(TMN+1);for(let i=0;i<=TMN;i++){const c=Math.pow(i/TMN,2)*24,v=(c*(2.51*c+0.03))/(c*(2.43*c+0.59)+0.14);TML[i]=Math.pow(clamp(v,0,1),1/2.2)*255}
+  const tmg=c=>{c*=expo;if(c<=0)return 0;const f=Math.sqrt(Math.min(c,24)/24)*TMN,i=f|0;return i>=TMN?TML[TMN]:TML[i]+(TML[i+1]-TML[i])*(f-i)};
+  const sunR=0.27*DEG*2.2,cosSun=Math.cos(sunR),sunDisc=sunAt(0,[0,0,0],sunL),sunRad=1/(Math.PI*sunR*sunR);
+  for(let y=0;y<H;y++){const fy=y/H;for(let x=0;x<W;x++){const fx=x/W;
+    let [dx,dy,dz]=ray(fx,fy);const dyc=Math.max(dy,0.0105);
+    let R=0,G=0,B=0;
+    // behind-the-clouds layer: sun disc, glare, stars, moon
+    let bR=0,bG=0,bB=0;
+    const cs=dx*sx+dyc*sy+dz*sz;
+    if(sunEl>-1.5&&cs>.95){const ang=Math.acos(clamp(cs,-1,1));
+      if(cs>cosSun-0.00002){const rr=ang/sunR,ld=.4+.6*Math.sqrt(Math.max(0,1-rr*rr)),cv=clamp((sunR-ang)/(sunR*.15),0,1)*ld*sunRad;bR+=sunDisc[0]*cv;bG+=sunDisc[1]*cv;bB+=sunDisc[2]*cv}
+      const gl=(.9*Math.exp(-ang/(.5*DEG))+.1*Math.exp(-ang/(2.5*DEG)))*.12;bR+=sunDisc[0]*gl;bG+=sunDisc[1]*gl;bB+=sunDisc[2]*gl}
+    if(night>0.01){const hv=sstep(0,0.1,dy),sk=.9/expo*night*hv,
+        h1=hash2(x,y,S.starSeed);let st=0,tint=.5;
+      if(h1>0.9988)st+=Math.pow((h1-0.9988)/0.0012,2.4)*0.45+0.03;
+      const cx=Math.floor(x/3),cy=Math.floor(y/3),h2=hash2(cx,cy,S.starSeed+77);
+      if(h2>0.9855){const jx=(hash2(cx,cy,5)*2+0.5),jy=(hash2(cx,cy,9)*2+0.5),ddx=x-cx*3-jx,ddy=y-cy*3-jy;st+=(0.3+(h2-0.9855)/0.0145*1.3)*Math.exp(-(ddx*ddx+ddy*ddy)/0.7);tint=hash2(cx,cy,3)}
+      const wy=fy-(0.16+mwA*fx*0.5+0.12),w=Math.exp(-(wy*wy)/0.02)*Math.max(0,0.15+1.1*(fbm(fx*6+S.ox,fy*6,5)-0.35))*.08;
+      // stars dim and redden near the horizon through the thicker air
+      const ex=Math.exp(-.25/Math.max(dyc,.03));bR+=(st*(0.8+0.4*tint)+w*.9)*sk*ex;bG+=(st*.9+w)*sk*ex;bB+=(st*(1.15-.4*tint)+w*1.3)*sk*ex}
+    if(mx>-1e4){const mdx=x-mx,mdy=y-my,mr=Math.hypot(mdx,mdy);
+      if(mr<moonR*12&&moonEl>-1){const mvis=extinct(odTo(0,RE+.05,0,mdx3,Math.max(mdy3,.01),mdz3,8),mK),Lmn=.03*ESUN*.05;
+        const halo=(Math.exp(-mr/(moonR*1.4))*.02+Math.exp(-mr/(moonR*5))*.006)*Math.pow(fracLit,1.6)*Lmn;bR+=halo*mvis[0];bG+=halo*mvis[1];bB+=halo*mvis[2];
+        if(mr<moonR+1.5){const cov=clamp((moonR+0.7-mr)/1.4,0,1),nx=mdx/moonR,ny=mdy/moonR,nzz=Math.sqrt(Math.max(0,1-nx*nx-ny*ny));
+          const lit=sstep(-0.04,0.06,nx*Lx+ny*Ly+nzz*Lz),rx=nx*mcr-ny*msr,ry=nx*msr+ny*mcr;
+          const maria=0.7+0.3*sstep(0.35,0.65,fbm(rx*2.2+4,ry*2.2+9,4)),crat=0.93+0.07*n2(rx*14,ry*14),bb=(lit*maria*crat*(0.9+0.2*nzz)+.012*(1-lit))*Lmn*cov;
+          bR+=bb*mvis[0];bG+=bb*mvis[1];bB+=bb*mvis[2]}}}
+    // composite low clouds (bilinear from the half-res buffer)
+    const gx=x/2,gy=y/2,i0=gx|0,j0=gy|0,ax=gx-i0,ay=gy-j0;let cr=0,cg=0,cb=0,ct=0,cT=0;
+    for(let k=0;k<4;k++){const ii=i0+(k&1),jj=j0+(k>>1),w=((k&1)?ax:1-ax)*((k>>1)?ay:1-ay),q=Math.min(jj,H2-1)*W2+Math.min(ii,W2-1),o=q*4;cr+=CB[o]*w;cg+=CB[o+1]*w;cb+=CB[o+2]*w;ct+=CB[o+3]*w;R+=SB[q*3]*w;G+=SB[q*3+1]*w;B+=SB[q*3+2]*w;cT+=CB2[q]*w}
+    bR*=cT;bG*=cT;bB*=cT;
+    const ct3=ct*ct*ct;R=R*ct+bR*ct3+cr;G=G*ct+bG*ct3+cg;B=B*ct+bB*ct3+cb;
+    const dn=(hash2(x,y,991)-0.5)/255,i=(y*W+x)*4;
+    data[i]=tmg(R)+dn*255;data[i+1]=tmg(G)+dn*255;data[i+2]=tmg(B)+dn*255;data[i+3]=255}}
 }
 
 // ---------- UI ----------
