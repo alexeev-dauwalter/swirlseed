@@ -121,6 +121,26 @@ function startLab(CFG){
   window.__lab={state,renderTo};
   sync();draw();strips();
 }
+// cold-press paper: height field (0..1) and a lit version for emboss shading
+function paperHeight(W,H,S,scale){const h=new Float32Array(W*H),m=Math.min(W,H)/ (scale||1);
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const u=x/m,v=y/m;h[y*W+x]=.5*fbm2(u*26,v*26,S+101,3)+.3*fbm2(u*70,v*70,S+102,2)+.2*hash2(x,y,S+103)}return h}
+function paperLight(h,W,H,k){const L=new Float32Array(W*H);for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x,xm=x>0?h[i-1]:h[i],ym=y>0?h[i-W]:h[i];L[i]=1+((h[i]-xm)*.7+(h[i]-ym)*.7)*k}return L}
+function boxBlur(a,W,H,r){if(r<1)return a;const t=new Float32Array(W*H),o=new Float32Array(W*H),n=2*r+1;
+  for(let y=0;y<H;y++){let s=0;const row=y*W;for(let x=-r;x<=r;x++)s+=a[row+clamp(x,0,W-1)];for(let x=0;x<W;x++){t[row+x]=s/n;s+=a[row+Math.min(W-1,x+r+1)]-a[row+Math.max(0,x-r)]}}
+  for(let x=0;x<W;x++){let s=0;for(let y=-r;y<=r;y++)s+=t[clamp(y,0,H-1)*W+x];for(let y=0;y<H;y++){o[y*W+x]=s/n;s+=t[Math.min(H-1,y+r+1)*W+x]-t[Math.max(0,y-r)*W+x]}}return o}
+// one layer of transparent pigment: A = water/pigment coverage (0..1); adds absorbance into Ab (rgb interleaved)
+function pigmentLayer(Ab,A,W,H,pig,o){
+  const m=Math.min(W,H),S=o.S|0,k=pig.map(c=>-Math.log(clamp(c,.02,.999))),Ab1=boxBlur(boxBlur(A,W,H,Math.max(1,Math.round(m*(o.edgeR||.006)))),W,H,Math.max(1,Math.round(m*(o.edgeR||.006))));
+  const fq=o.mottleF||3;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x,a=A[i];if(a<.003)continue;
+    const u=x/m,v=y/m,edge=Math.max(0,a-Ab1[i]),mot=.8+.4*fbm2(u*fq+S*.001,v*fq,S+11,4);
+    let D=a*mot+edge*(o.edge||2.4);
+    if(o.bloom){const n=fbm2(u*(o.bloomF||5),v*(o.bloomF||5),S+21,5),t=o.bloomT||.58,b=sstep(t,t+.015,n);D*=1-.3*b*a;D+=a*.55*o.bloom*Math.exp(-Math.pow((n-t)/.007,2))}
+    const g=o.ph?(1-(o.gran||.5)+(o.gran||.5)*2*o.ph[i]*(.6+.4*fbm2(u*40,v*40,S+31,2))):1;D*=g*(o.strength||1);
+    Ab[i*3]+=D*k[0];Ab[i*3+1]+=D*k[1];Ab[i*3+2]+=D*k[2]}}
+function developPaper(ctx,Ab,W,H,paper,ph,pl){const img=ctx.createImageData(W,H),d=img.data;
+  for(let i=0;i<W*H;i++){const l=pl?pl[i]:1,o=i*4;d[o]=enc(paper[0]*Math.exp(-Ab[i*3])*l);d[o+1]=enc(paper[1]*Math.exp(-Ab[i*3+1])*l);d[o+2]=enc(paper[2]*Math.exp(-Ab[i*3+2])*l);d[o+3]=255}
+  ctx.putImageData(img,0,0)}
 const L3=a=>a.map(c=>Math.pow(c/255,2.2));
 const mix3=(a,b,t)=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];
 function ramp(stops,t){t=clamp(t,0,1)*(stops.length-1);const i=Math.min(stops.length-2,t|0);return mix3(stops[i],stops[i+1],t-i)}
@@ -135,7 +155,7 @@ function render(cv,P,W,H){
   const ringed=T==="Ringed giant",r=(ringed?.72:1)*P.size*H,cx=W/2,cy=H/2,inv=1/r;
   const tilt=ringed?.32+R()*.3:0,roll=(R()-.5)*.5,ct=Math.cos(tilt),st=Math.sin(tilt);
   let npx=0,npy=ct,npz=-st;{const c=Math.cos(roll),s=Math.sin(roll),x=npx*c-npy*s,y=npx*s+npy*c;npx=x;npy=y}
-  const gas=GAS[(R()*3)|0],fq=5+R()*5,sx=.3+R()*.2,sy=.18+R()*.3*(R()<.5?1:-1),rockHue=R(),ox=R()*50,oy=R()*50,oz=R()*50;
+  const gas=GAS[(R()*3)|0],fq=2.6+R()*2.6,sx=.3+R()*.2,sy=.18+R()*.3*(R()<.5?1:-1),rockHue=R(),ox=R()*50,oy=R()*50,oz=R()*50;
   const wl=.38+P.water*.24;
   const hA=R()*360,hB=hA+60+R()*90,hC=hA+180+(R()-.5)*60;
   const cA=oklchFit(.5,.17,hA),cB=oklchFit(.62,.2,hB),cC=oklchFit(.42,.13,hC);
@@ -166,19 +186,19 @@ function render(cv,P,W,H){
         let col,spec=0,cl=0;
         const X=nx*1.0+ox,Y=ny*1.0+oy,Z=nz*1.0+oz;
         if(T==="Rocky"){
-          const h=fbm3(X*1.9,Y*1.9,Z*1.9,S,5)*.8+.2*fbm3(X*7,Y*7,Z*7,S+9,3),lat=Math.abs(ny);
+          const wq=fbm3(X*1.2+7,Y*1.2,Z*1.2,S+40,3)*.9,h=fbm3(X*1.9+wq,Y*1.9,Z*1.9+wq,S,7)*.82+.18*fbm3(X*9,Y*9,Z*9,S+9,4),lat=Math.abs(ny);
           if(h<wl){const dp=clamp((wl-h)/.28,0,1);col=mix3(L3([70,150,186]),L3([8,28,78]),Math.pow(dp,.6));spec=Math.pow(clamp(2*ndl*nz-nz*Lz*0+0,0,1),1)*0;
-            const hv=[Lx,Ly,Lz+1],hl=Math.hypot(hv[0],hv[1],hv[2]);spec=Math.pow(clamp((nx*hv[0]+ny*hv[1]+nz*hv[2])/hl,0,1),90)*.9}
+            const hv=[Lx,Ly,Lz+1],hl=Math.hypot(hv[0],hv[1],hv[2]);{const hd=clamp((nx*hv[0]+ny*hv[1]+nz*hv[2])/hl,0,1);spec=Math.pow(hd,260)*.7+Math.pow(hd,24)*.06}}
           else{const k=clamp((h-wl)/.3,0,1),dry=clamp(fbm3(X*2.4+5,Y*2.4,Z*2.4,S+4,3)*1.5-.3+lat*.2,0,1);
-            col=mix3(mix3(L3([52,112,52]),L3([166,138,84]),dry),L3([140,124,110]),k*k);if(k>.8)col=mix3(col,L3([240,240,244]),(k-.8)*4)}
+            col=mix3(mix3(mix3(L3([34,78,34]),L3([88,120,52]),clamp(dry*2,0,1)),L3([196,160,104]),clamp(dry*2-1,0,1)),L3([120,104,92]),k*k);if(k>.8)col=mix3(col,L3([240,240,244]),(k-.8)*4)}
           const ice=sstep(.8,.9,lat+(fbm3(X*4,Y*4,Z*4,S+6,3)-.5)*.14);col=mix3(col,L3([236,242,248]),ice);
-          const wx=fbm3(X*1.6+3,Y*1.6,Z*1.6,S+11,3)*2.4;cl=clamp((fbm3(X*2.6+wx,Y*2.6,Z*2.6+wx,S+12,5)-.5)*3.2*P.clouds*1.6+.0,0,1)*P.clouds*1.3;cl=clamp(cl,0,.95)}
+          const wx=fbm3(X*1.6+3,Y*1.6,Z*1.6,S+11,3)*2.2,wy=fbm3(X*1.6,Y*1.6+5,Z*1.6,S+13,3)*2.2,cn=fbm3(X*2.4+wx,Y*3.2+wy,Z*2.4+wx,S+12,7),fine=fbm3(X*14,Y*14,Z*14,S+14,3);cl=sstep(.63-.14*P.clouds,.74-.12*P.clouds,cn*(.85+.3*fine))*(.75+.25*fine)*Math.min(1,P.clouds*2);cl=clamp(cl,0,.97)}
         else if(T==="Ice"){
           const h=fbm3(X*2.2,Y*2.2,Z*2.2,S,5),cr=Math.abs(fbm3(X*3.1+9,Y*3.1,Z*3.1,S+5,4)-.5),line=1-sstep(.0,.035,cr);
           col=mix3(mix3(L3([196,226,240]),L3([240,248,252]),h),L3([92,148,190]),line*.8+sstep(.5,.0,h)*.15);spec=Math.pow(clamp(nz,0,1),12)*.12;cl=P.clouds*.3*clamp(fbm3(X*3,Y*3,Z*3,S+12,4)*2-.7,0,1)}
         else{
-          const w=fbm3(X*2.2,Y*2.2,Z*2.2,S+3,4),b=ny*fq+w*.7+fbm3(X*9,Y*9*.2,Z*9,S+8,3)*.15;
-          col=ramp(gas,.5+.5*Math.sin(b*3.1)+.25*(w-.5));
+          const w=fbm3(X*2.2,Y*2.2,Z*2.2,S+3,4),lat=ny*fq,shear=Math.sin(lat*3.1)*1.3,ed=fbm3(X*5+shear,Y*14,Z*5-shear,S+15,5),b=lat+w*.55+(ed-.5)*.55*Math.abs(Math.cos(lat*3.1))+fbm3(X*9,Y*9*.2,Z*9,S+8,3)*.15;
+          col=ramp(gas,.5+.42*Math.sin(b*3.1)+.18*Math.sin(b*7.3+1)+.25*(w-.5));
           const ex=(nx-sx)/.34,ey=(ny-sy)/.17,e2=ex*ex+ey*ey;if(e2<1.6){const sw=Math.atan2(ey,ex)+e2*3;col=mix3(col,mix3(L3([190,70,50]),L3([232,170,120]),.5+.5*Math.sin(sw*2)),sstep(1.6,.4,e2)*.85)}}
         // ring shadow
         let shade=1;
