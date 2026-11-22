@@ -34,7 +34,7 @@ jobs:
           npm test
 
   # Regenerating the golden file from TypeScript must not change it: otherwise the algorithm was
-  # modified without updating testdata/golden.txt (which the Rust tests compare against).
+      # modified without updating the shared fixture.
   golden-is-current:
     runs-on: ubuntu-latest
     steps:
@@ -46,4 +46,4 @@ jobs:
         run: |
           npm install --no-audit --no-fund
           npm run golden
-      - run: git diff --exit-code -- testdata/golden.txt
+      - run: git diff --exit-code -- crates/swirlseed/testdata/golden.txt

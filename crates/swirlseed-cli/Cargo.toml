@@ -16,5 +16,5 @@ path = "src/main.rs"
 
 [dependencies]
 swirlseed = { version = "0.1.0", path = "../swirlseed" }
-clap = { version = "4", features = ["derive"] }
+clap = { version = "~4.5.0", features = ["derive"] }
 png = "0.17"

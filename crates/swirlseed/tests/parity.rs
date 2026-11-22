@@ -274,9 +274,7 @@ fn sha256_known_vectors() {
 
 #[test]
 fn golden_hashes_match_typescript() {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../testdata/golden.txt");
-    let golden =
-        std::fs::read_to_string(path).expect("testdata/golden.txt (run `npm run golden` in packages/swirlseed)");
+    let golden = include_str!("../testdata/golden.txt");
 
     let mut actual = String::new();
     for (name, seed, w, h, opts) in cases() {

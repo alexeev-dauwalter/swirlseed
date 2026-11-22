@@ -1,8 +1,8 @@
-// Golden tests. `testdata/golden.txt` is shared with the Rust crate (crates/swirlseed/tests/parity.rs):
+// Golden tests share the fixture in crates/swirlseed/testdata/golden.txt:
 // both implementations must produce exactly the same SHA-256 for every case.
 //
-//   npm test                 verify against testdata/golden.txt
-//   npm run golden           regenerate testdata/golden.txt (only when the algorithm changes on purpose)
+//   npm test                 verify against the fixture
+//   npm run golden           regenerate the fixture (only when the algorithm changes on purpose)
 
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -12,7 +12,7 @@ import { test } from "node:test";
 import { createPattern, generate, paletteHex } from "../dist/index.js";
 import * as dm from "../dist/dmath.js";
 
-const GOLDEN = new URL("../../../testdata/golden.txt", import.meta.url);
+const GOLDEN = new URL("../../../crates/swirlseed/testdata/golden.txt", import.meta.url);
 const sha = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
 /** Keep this list identical to `cases()` in crates/swirlseed/tests/parity.rs. */

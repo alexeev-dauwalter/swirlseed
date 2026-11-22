@@ -19,8 +19,7 @@ The Rust and TypeScript implementations produce **identical pixels** for the sam
 ## CLI
 
 ```sh
-# install from the repo (no registry needed)
-cargo install --git https://github.com/alexeev-dauwalter/swirlseed swirlseed-cli
+cargo install swirlseed-cli --locked
 
 swirlseed "Hello, world!"                      # → Hello_world.png, 1024×1024
 swirlseed "Hello, world!" -o bg.png -s 1920x1080
@@ -103,7 +102,7 @@ Because the generator is a pure function of the string, there is nothing to stor
 
 `Math.sin` and friends may differ in the last bits between JS engines, and from libm in Rust. swirlseed therefore does not use them: `sin`, `cos`, `exp`, `ln` and `pow` are implemented in [`dmath.ts`](packages/swirlseed/src/dmath.ts) and [`dmath.rs`](crates/swirlseed/src/dmath.rs) using only `+ − × ÷`, `floor` and `sqrt`, which IEEE 754 specifies exactly. Buffers are `f32` where the TypeScript code uses `Float32Array`, and final quantisation follows `Uint8ClampedArray` semantics (round half to even).
 
-[`testdata/golden.txt`](testdata/golden.txt) holds a SHA-256 of the pixels for a set of seeds, sizes and effect combinations. Both test suites check against that one file, so any divergence between the two implementations fails CI. If you change the algorithm on purpose, regenerate it with `npm run golden` and commit the result (that is a breaking change for everyone who stores seeds, so bump the major version).
+[`crates/swirlseed/testdata/golden.txt`](crates/swirlseed/testdata/golden.txt) holds a SHA-256 of the pixels for a set of seeds, sizes and effect combinations. Both test suites check against that one file, so any divergence between the two implementations fails CI. If you change the algorithm on purpose, regenerate it with `npm run golden` and commit the result (that is a breaking change for everyone who stores seeds, so bump the major version).
 
 NFC: seeds are Unicode-normalised (NFC) so that `é` typed as one or two code points gives the same picture. In Rust this is the default `nfc` feature (it pulls in `unicode-normalization`); disable it with `default-features = false` if you only ever pass ASCII or already-normalised text.
 
