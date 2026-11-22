@@ -1,0 +1,20 @@
+[package]
+name = "swirlseed"
+description = "Deterministic fluid, glassy marbling patterns generated from a string seed. Byte-identical with the npm package."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+keywords = ["generative", "pattern", "seed", "marbling", "halftone"]
+categories = ["graphics", "multimedia::images"]
+
+[features]
+default = ["nfc"]
+# NFC-normalise the seed, like `String.prototype.normalize("NFC")` in the TypeScript package, so that
+# the same text typed with precomposed or combining characters gives the same pattern.
+nfc = ["dep:unicode-normalization"]
+
+[dependencies]
+unicode-normalization = { version = "0.1", optional = true }
