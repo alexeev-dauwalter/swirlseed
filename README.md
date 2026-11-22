@@ -123,3 +123,7 @@ cd packages/swirlseed && npm run build && cd ../.. && node scripts/make-gallery.
 ## License
 
 MIT, see [LICENSE](LICENSE).
+
+## Demo site
+
+`site/` contains a static demo (live generator and glass-UI examples) ready for Cloudflare Pages; see [site/README.md](site/README.md).
