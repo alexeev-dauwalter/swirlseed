@@ -184,7 +184,24 @@ input[type=range]{width:100%;accent-color:#14151a}
 .ex-grid>*{justify-self:center}
 .ex-grid .folder{margin:0}
 .ex-grid .card{width:340px;height:340px;aspect-ratio:auto}
-@media(max-width:420px){.ex-grid{zoom:.82}}
+
+/* ---------- small screens ---------- */
+.inst>*,.gen>*,.panel,.code{min-width:0}
+.seedbox input{min-width:0;flex:1}
+@media(max-width:900px){.inst{grid-template-columns:minmax(0,1fr)}.gen{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:600px){
+  body{padding:32px 18px 28px}
+  h1{font-size:30px}
+  header{margin-bottom:28px}
+  .sechead{margin-bottom:20px}
+  .seedbox{width:100%}.seedbox input{width:auto}
+  .panel{padding:18px}.code .codehead{padding:8px 8px 2px 8px;gap:6px}
+  .tabs button{padding:6px 9px}
+  .row{grid-template-columns:76px 1fr 42px}
+  #generator{margin-top:0}#examples,#install{margin-top:64px}
+  .gactions{flex-wrap:wrap}
+  footer{flex-direction:column;gap:6px;margin-top:40px}
+}
 @media(max-width:900px){.grid{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -225,7 +242,7 @@ input[type=range]{width:100%;accent-color:#14151a}
 </section>
 
 <section id="examples">
-<div class="sechead"><div><h2>Examples</h2><p>Folders, cards and widgets. Every background below is drawn live from its own seed string (for example “folder 37”). The field on the right appends your text to all of those seeds, so the whole set is remixed at once. Hover the folders.</p></div><form class="seedbox" id="seedForm"><input id="seedIn" placeholder="remix all examples…" autocomplete="off" spellcheck="false"><button type="submit">Remix</button><button type="button" id="seedReset" class="ghost" title="Back to the original seeds">Reset</button></form></div>
+<div class="sechead"><div><h2>Examples</h2><p>Folders, cards and widgets. Every background below is drawn live from its own seed string (for example “folder 37”). The remix field appends your text to all of those seeds, so the whole set is remixed at once. Hover the folders.</p></div><form class="seedbox" id="seedForm"><input id="seedIn" placeholder="remix all examples…" autocomplete="off" spellcheck="false"><button type="submit">Remix</button><button type="button" id="seedReset" class="ghost" title="Back to the original seeds">Reset</button></form></div>
 <section class="ex-grid">
   <div class="folder f1" data-seed="folder 37">
     <div class="shadow"><i style="clip-path:path('M0,52 Q0,26 26,26 L150,26 C176,26 176,0 202,0 L314,0 Q340,0 340,26 L340,244 Q340,270 314,270 L26,270 Q0,270 0,244 Z')"></i></div>
@@ -499,6 +516,17 @@ Object.assign(window, { createPattern, paletteHex, drawToCanvas });
   var W1=["amber","glass","tidal","velvet","neon","ember","lunar","coral","moss","indigo","opal","dusk"],W2=["river","bloom","drift","harbor","echo","canyon","aurora","orbit","silk","storm","garden","signal"];
   $("#gdice").onclick=function(){state.seed=W1[Math.random()*W1.length|0]+" "+W2[Math.random()*W2.length|0]+" "+(Math.random()*90+10|0);sync();schedule()};
   sync();render();
+})();
+</script>
+<script type="module">
+(function(){
+  var g=document.querySelector(".ex-grid");
+  function fit(){
+    g.style.zoom="";
+    var avail=g.parentElement.clientWidth,k=Math.min(1,avail/340);
+    if(k<1)g.style.zoom=k.toFixed(3);
+  }
+  fit();addEventListener("resize",fit);
 })();
 </script>
 </body>
