@@ -9,7 +9,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Metaballs · swirlseed labs</title>
-<meta name="description" content="Merging blobs in 2D and 3D: chrome, glossy plastic, lava-lamp wax and iridescent film, generated from a seed string.">
+<meta name="description" content="Merging blobs in 2D and 3D: chrome, glass, plastic, lava, oil film, gradient layers and water drops, generated from a seed string.">
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <style>
 :root{--ink:#14151a;--page:#eeeef0}
@@ -105,6 +105,7 @@ function startLab(CFG){
     CFG.strips.forEach((t,i)=>{const el=$("#s_"+i);el.innerHTML="";t.opts.forEach(o=>{const d=document.createElement("div");d.className="th";const c=document.createElement("canvas"),sp=document.createElement("span");sp.textContent=o[0];d.append(c,sp);
       d.onclick=()=>{state[t.k]=o[1];sync();schedule();scrollTo({top:0,behavior:"smooth"})};el.appendChild(d);
       jobs.push(()=>{const P=Object.assign({},state);P[t.k]=o[1];renderTo(c,P,CFG.thumbW||340);d.classList.toggle("on",state[t.k]===o[1])})})});
+    if(CFG.relabel)CFG.relabel(state,$);
     let i=0;(function step(){if(my!==tok||i>=jobs.length)return;jobs[i++]();setTimeout(step,0)})()}
   function schedule(){$("#badge").textContent="Rendering…";clearTimeout(timer);timer=setTimeout(()=>{draw();strips()},60)}
   const later=()=>{clearTimeout(timer);timer=setTimeout(schedule,260)};
@@ -112,7 +113,7 @@ function startLab(CFG){
   ASP.forEach(a=>{const b=document.createElement("button");b.textContent=a[0];b.dataset.v=a[1];b.onclick=()=>{state.aspect=a[1];sync();schedule()};$("#g_aspect").appendChild(b)});
   function sync(){$("#seed").value=state.seed;
     CFG.sliders.forEach(s=>{$("#r_"+s.k).value=state[s.k];$("#o_"+s.k).textContent=s.fmt?s.fmt(state[s.k]):state[s.k]});
-    [...CFG.segs.map(s=>s.k),"aspect"].forEach(k=>[...$("#g_"+k).children].forEach(b=>b.classList.toggle("on",String(state[k])===b.dataset.v)))}
+    [...CFG.segs.map(s=>s.k),"aspect"].forEach(k=>[...$("#g_"+k).children].forEach(b=>b.classList.toggle("on",String(state[k])===b.dataset.v)));if(CFG.relabel)CFG.relabel(state,$)}
   $("#seed").addEventListener("input",e=>{state.seed=e.target.value;later()});
   CFG.sliders.forEach(s=>$("#r_"+s.k).addEventListener("input",e=>{state[s.k]=+e.target.value;sync();later()}));
   const W1=CFG.words1||["amber","glass","tidal","velvet","ember","lunar","coral","moss","indigo","opal","dusk","saffron"],W2=CFG.words2||["river","bloom","drift","harbor","echo","canyon","garden","silk","storm","tulip","signal","orbit"];
@@ -160,33 +161,59 @@ function layout2D(P,R,asp){const N=Math.round(P.balls),B=[],nc=Math.max(1,Math.r
 const tmA=c=>{const v=(c*(2.51*c+0.03))/(c*(2.43*c+0.59)+0.14);return enc(v<0?0:v>1?1:v)};
 const film=th=>[.5+.5*Math.cos(TAU*th),.5+.5*Math.cos(TAU*(th+.33)),.5+.5*Math.cos(TAU*(th+.67))];
 
-// ---------------- 2D: flat, graphic metaballs ----------------
+// ---------------- 2D: graphic metaballs ----------------
+const N3={s1:"Chrome",s2:"Glass",s3:"Glossy",s4:"Lava",s5:"Iridescent"},N2={s1:"Layers",s2:"Gradient",s3:"Drops",s4:"Contour",s5:"Holo"};
+const VIV=["#ec2f55","#ee7419","#7b3fb4","#2f6fe4","#c9318d","#f6466f","#9b4fd6","#ff8a3d"].map(h=>L3(hex2(h)));
+function hex2(h){const n=parseInt(h.slice(1),16);return[(n>>16)&255,(n>>8)&255,n&255]}
 function render2D(cv,P,W,H){
-  const ctx=cv.getContext("2d"),img=ctx.createImageData(W,H),d=img.data,R=rngFor(P.seed,"mb"),S=(R()*1e6)|0,asp=W/H,st=P.style;
-  const B=layout2D(P,R,asp),N=B.length,T=.42-.3*P.merge,lv=LAVA[(R()*LAVA.length)|0],gp=GLOSS[(R()*GLOSS.length)|0].map(L3),bg0=L3(lv.bg[0]),bg1=L3(lv.bg[1]),wax=L3(lv.wax),fo=R()*10;
-  const ang=P.light*Math.PI/180,ox=Math.sin(ang)*.035*P.size/.5,oy=.03*P.size/.5;
-  const f=(u,v,o)=>{let F=0,Fx=0,Fy=0,w0=0,w1=0,w2=0;for(let i=0;i<N;i++){const b=B[i],dx=u-b.x,dy=v-b.y,R2=b.r*b.r,q=(dx*dx+dy*dy)/R2;if(q>=1)continue;const o_=1-q,g=o_*o_*o_,gd=-6*o_*o_/R2;F+=g;Fx+=gd*dx;Fy+=gd*dy;const c=i%3;if(c===0)w0+=g;else if(c===1)w1+=g;else w2+=g}o[0]=F;o[1]=Fx;o[2]=Fy;o[3]=w0;o[4]=w1;o[5]=w2;return o};
-  const o=new Float64Array(6),o2=new Float64Array(6),paper=L3([241,238,230]),ink=L3([28,28,34]);
-  const LV=[.12,.2,.3,.45,.65,.85,1.2,1.7,2.4,3.4].map(k=>T*k);
-  for(let y=0;y<H;y++){const v=y/H;for(let x=0;x<W;x++){const u=x/H;f(u,v,o);const F=o[0],gl=Math.hypot(o[1],o[2])+1e-9,cov=clamp((F-T)/gl*H+.5,0,1);
-    let r,g,b;
-    if(st==="Chrome"){// topographic drawing of the field
-      r=paper[0];g=paper[1];b=paper[2];const fill=cov*.06;r-=fill;g-=fill;b-=fill*.8;
+  const ctx=cv.getContext("2d"),img=ctx.createImageData(W,H),d=img.data,R=rngFor(P.seed,"mb2"),S=(R()*1e6)|0,asp=W/H,st=N2[P.style],T=.42-.3*P.merge,N=Math.round(P.balls),sz=P.size/.5;
+  const ang=P.light*Math.PI/180,Lx=Math.sin(ang)*.7,Ly=-.7;
+  // groups of balls: a group melts together, different groups overlap
+  const groups=[];
+  const addGroup=(cx,cy,n,r0,spread)=>{const g={b:[]};for(let i=0;i<n;i++){const r=r0*(.55+.7*R());let x=cx,y=cy;if(i){const p=g.b[(R()*g.b.length)|0],a=R()*TAU,dd=(p.r/2.05+r)*(spread*(.6+.6*R()));x=p.x+Math.cos(a)*dd;y=p.y+Math.sin(a)*dd}g.b.push({x,y,r:r*2.05})}
+    let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;for(const q of g.b){x0=Math.min(x0,q.x-q.r);y0=Math.min(y0,q.y-q.r);x1=Math.max(x1,q.x+q.r);y1=Math.max(y1,q.y+q.r)}g.bb=[x0,y0,x1,y1];groups.push(g);return g};
+  if(st==="Layers"){const nb=Math.max(2,Math.round(N/4));for(let k=0;k<nb;k++)addGroup(asp*(.12+.76*R()),.12+.76*R(),4+((R()*5)|0),.1*sz,1.05);
+    const ns=Math.round(N*1.6);for(let k=0;k<ns;k++)addGroup(asp*R(),R(),1,.02*sz+.045*sz*Math.pow(R(),1.5),1)}
+  else if(st==="Gradient"){// one bold chain swinging across the frame
+    const g={b:[]};let x=-.04,y=.3+.4*R(),a=(R()-.5)*1.4;const n=clamp(Math.round(N*.45),4,9),stp=asp*.95/n;
+    for(let i=0;i<n;i++){const r=(.08+.09*R())*sz*(i===n-1?1.5:1);g.b.push({x,y,r:r*2.05});a+=(R()-.5)*2.2;if(y<.3)a=Math.abs(a)*.8+.25;if(y>.7)a=-Math.abs(a)*.8-.25;a=clamp(a,-.85,.85);x+=Math.cos(a)*stp;y+=Math.sin(a)*stp*.9}
+    let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;for(const q of g.b){x0=Math.min(x0,q.x-q.r);y0=Math.min(y0,q.y-q.r);x1=Math.max(x1,q.x+q.r);y1=Math.max(y1,q.y+q.r)}g.bb=[x0,y0,x1,y1];groups.push(g)}
+  else if(st==="Drops"){// one population of water drops, a few touching
+    const g={b:[]},cx=asp*.5,cy=.5;for(let i=0;i<N;i++){const r=(.035+.06*Math.pow(R(),1.3))*sz;let x,y,ok=false;for(let t=0;t<30&&!ok;t++){x=cx+(R()-.5)*asp*.62;y=cy+(R()-.5)*.68;ok=g.b.every(q=>Math.hypot(q.x-x,q.y-y)>(q.r/2.05+r)*(R()<.2?.9:1.6))}g.b.push({x,y,r:r*2.05})}groups.push(g)}
+  else{addGroup(asp*.5,.5,N,.09*sz,1);const g=groups[0];g.b=layout2D(P,R,asp)}
+  // colours per group
+  const dark=R()<.55,bgA=dark?L3([24,24,28]):L3([118,10,72]),bgB=dark?L3([20,20,24]):L3([106,16,170]);
+  groups.forEach((g,i)=>{const c1=VIV[(R()*VIV.length)|0];let c2=VIV[(R()*VIV.length)|0];g.c1=c1;g.c2=c2;g.ang=R()*TAU;g.al=g.b.length>1?.55+.2*R():.7+.25*R()});
+  const gradA=L3([66,84,240]),gradB=L3([196,40,220]),gradC=L3([246,24,118]);
+  const fieldG=(g,u,v,o)=>{let F=0,Fx=0,Fy=0;if(u<g.bb[0]||u>g.bb[2]||v<g.bb[1]||v>g.bb[3]){o[0]=0;o[1]=0;o[2]=0;return o}for(const b of g.b){const dx=u-b.x,dy=v-b.y,R2=b.r*b.r,q=(dx*dx+dy*dy)/R2;if(q>=1)continue;const oo=1-q,gg=oo*oo*oo,gd=-6*oo*oo/R2;F+=gg;Fx+=gd*dx;Fy+=gd*dy}o[0]=F;o[1]=Fx;o[2]=Fy;return o};
+  const fieldAll=(u,v,o)=>{let F=0,Fx=0,Fy=0;for(const g of groups)for(const b of g.b){const dx=u-b.x,dy=v-b.y,R2=b.r*b.r,q=(dx*dx+dy*dy)/R2;if(q>=1)continue;const oo=1-q,gg=oo*oo*oo,gd=-6*oo*oo/R2;F+=gg;Fx+=gd*dx;Fy+=gd*dy}o[0]=F;o[1]=Fx;o[2]=Fy;return o};
+  const o=new Float64Array(3),o2=new Float64Array(3),paper=L3([241,238,230]),ink=L3([28,28,34]),fo=R()*10,LV=[.12,.2,.3,.45,.65,.85,1.2,1.7,2.4,3.4].map(k=>T*k);
+  const bgD0=L3([232,246,234]),bgD1=L3([214,224,236]);
+  for(let y=0;y<H;y++){const v=y/H;for(let x=0;x<W;x++){const u=x/H;let r,g,b;
+    if(st==="Layers"){r=lerp(bgA[0],bgB[0],v);g=lerp(bgA[1],bgB[1],v);b=lerp(bgA[2],bgB[2],v);
+      for(const G of groups){fieldG(G,u,v,o);if(o[0]<T*.5)continue;const gl=Math.hypot(o[1],o[2])+1e-9,cov=clamp((o[0]-T)/gl*H+.5,0,1);if(cov<=0)continue;
+        const ca=Math.cos(G.ang),sa=Math.sin(G.ang),bx=G.bb,t=clamp((((u-(bx[0]+bx[2])/2)*ca+(v-(bx[1]+bx[3])/2)*sa)/Math.max(bx[2]-bx[0],bx[3]-bx[1])+.5),0,1),a=cov*G.al;
+        // translucent layers: overlaps read as new mixed colours, like printed acetate
+        r=lerp(r,lerp(G.c1[0],G.c2[0],t),a);g=lerp(g,lerp(G.c1[1],G.c2[1],t),a);b=lerp(b,lerp(G.c1[2],G.c2[2],t),a)}}
+    else if(st==="Gradient"){r=.79;g=.79;b=.8;const G=groups[0];fieldG(G,u,v,o);const gl=Math.hypot(o[1],o[2])+1e-9,cov=clamp((o[0]-T)/gl*H+.5,0,1);
+      if(cov>0){const t=clamp((v-G.bb[1])/(G.bb[3]-G.bb[1]),0,1),c=t<.5?[lerp(gradA[0],gradB[0],t*2),lerp(gradA[1],gradB[1],t*2),lerp(gradA[2],gradB[2],t*2)]:[lerp(gradB[0],gradC[0],t*2-1),lerp(gradB[1],gradC[1],t*2-1),lerp(gradB[2],gradC[2],t*2-1)];r=lerp(r,c[0],cov);g=lerp(g,c[1],cov);b=lerp(b,c[2],cov)}}
+    else if(st==="Drops"){const t=clamp(u/asp*.6+v*.4,0,1);r=lerp(bgD0[0],bgD1[0],t);g=lerp(bgD0[1],bgD1[1],t);b=lerp(bgD0[2],bgD1[2],t);
+      // soft shadow of the drop on the surface, with a little focused light inside it
+      fieldAll(u-Lx*.012*sz,v-Ly*.012*sz,o2);const sh=sstep(T*.3,T*1.3,o2[0]);
+      fieldAll(u,v,o);const F=o[0],gl=Math.hypot(o[1],o[2])+1e-9,cov=clamp((F-T)/gl*H+.5,0,1);
+      const k=1-.07*sh*(1-cov);r*=k;g*=k;b*=k;
+      if(cov>0){const hgt=Math.sqrt(Math.max(F-T,1e-6))*.09*sz,nx=-o[1]*.09*sz/(2*Math.sqrt(Math.max(F-T,1e-6))),ny=-o[2]*.09*sz/(2*Math.sqrt(Math.max(F-T,1e-6))),nl=Math.hypot(nx,ny,1),ex=1-1/nl;
+        // the drop is clear: the surface shows through, refracted; the rim bends light away and splits it into colour
+        const rr=[0,0,0];for(let c=0;c<3;c++){const o_=(c-1)*.05,dk=.62*sstep(.45+o_,.9+o_,ex)*(1-.45*sstep(.9+o_,1,ex));rr[c]=[r,g,b][c]*(1-dk)}
+        const lit=(nx*Lx+ny*Ly)/nl,hl=Math.pow(clamp(lit*1.6,0,1),6)*sstep(.3,.7,ex)*.55+Math.exp(-Math.pow((ex-.12)/.05,2))*clamp(-lit,0,1)*.12;
+        const ca=Math.exp(-Math.pow((ex-.35)/.25,2))*clamp(-lit*2,0,1)*.08;
+        r=lerp(r,rr[0]+hl+ca,cov);g=lerp(g,rr[1]+hl+ca,cov);b=lerp(b,rr[2]+hl+ca,cov)}}
+    else if(st==="Contour"){fieldAll(u,v,o);const F=o[0],gl=Math.hypot(o[1],o[2])+1e-9,cov=clamp((F-T)/gl*H+.5,0,1);r=paper[0];g=paper[1];b=paper[2];const fill=cov*.06;r-=fill;g-=fill;b-=fill*.8;
       for(const L of LV){const dpx=Math.abs(F-L)/gl*H,wd=L===T?1.3:.55,a=clamp(wd-dpx+.5,0,1)*(L===T?1:.75);r=lerp(r,ink[0],a);g=lerp(g,ink[1],a);b=lerp(b,ink[2],a)}}
-    else if(st==="Glossy"){// flat illustration: drop shadow, flat colour, cartoon highlight
-      r=.82;g=.8;b=.77;f(u-ox,v-oy,o2);const sh=clamp((o2[0]-T)/(Math.hypot(o2[1],o2[2])+1e-9)*H+.5,0,1)*.22;r*=1-sh;g*=1-sh;b*=1-sh*.9;
-      const ws=o[3]+o[4]+o[5]+1e-9,al=[0,1,2].map(k=>(gp[0][k]*o[3]+gp[1][k]*o[4]+gp[2][k]*o[5])/ws);
-      f(u+ox*.5,v+oy*.6,o2);const hi=clamp((o2[0]-T*2.4)/(Math.hypot(o2[1],o2[2])+1e-9)*H+.5,0,1)*.0+clamp((F-T*1.0)/gl*H-5,0,1)*0;
-      f(u+ox*.9,v+oy*.9,o2);const inner=clamp((T*1.05-o2[0])/(Math.hypot(o2[1],o2[2])+1e-9)*H+.5,0,1);// lit crescent on the light side
-      const k=1+.35*inner;r=lerp(r,al[0]*k,cov);g=lerp(g,al[1]*k,cov);b=lerp(b,al[2]*k,cov)}
-    else if(st==="Lava"){// retro poster
-      r=lerp(bg1[0],bg0[0],v);g=lerp(bg1[1],bg0[1],v);b=lerp(bg1[2],bg0[2],v);const glow=Math.max(0,F/T)*.18*(1-cov);r+=wax[0]*glow;g+=wax[1]*glow;b+=wax[2]*glow;
-      const k=.75+.5*clamp(o[2]/gl*.5+.5,0,1);r=lerp(r,wax[0]*k,cov);g=lerp(g,wax[1]*k,cov);b=lerp(b,wax[2]*k,cov)}
-    else{// holographic gradient map of the field
-      r=.012;g=.012;b=.02;const fc=film(fo+F/T*.55),gw=clamp(F/T,0,1)*.35*(1-cov);r+=fc[0]*gw*.4;g+=fc[1]*gw*.4;b+=fc[2]*gw*.4;
+    else{fieldAll(u,v,o);const F=o[0],gl=Math.hypot(o[1],o[2])+1e-9,cov=clamp((F-T)/gl*H+.5,0,1);r=.012;g=.012;b=.02;const fc=film(fo+F/T*.55),gw=clamp(F/T,0,1)*.35*(1-cov);r+=fc[0]*gw*.4;g+=fc[1]*gw*.4;b+=fc[2]*gw*.4;
       const kk=.75+.25*Math.sin(F/T*9);r=lerp(r,fc[0]*kk,cov);g=lerp(g,fc[1]*kk,cov);b=lerp(b,fc[2]*kk,cov)}
-    const gr=(hash2(x,y,S)-.5)*.02,i=(y*W+x)*4;d[i]=enc(r+gr);d[i+1]=enc(g+gr);d[i+2]=enc(b+gr);d[i+3]=255}}
-  ctx.putImageData(img,0,0);return "2D · "+st+" · "+N+" blobs"}
+    const gr=st==="Gradient"?0:(hash2(x,y,S)-.5)*.012,i=(y*W+x)*4;d[i]=enc(r+gr);d[i+1]=enc(g+gr);d[i+2]=enc(b+gr);d[i+3]=255}}
+  ctx.putImageData(img,0,0);return "2D · "+st}
 
 // ---------------- 3D: ray-marched implicit surface ----------------
 function env3(dx,dy,dz,warm){const el=dy,az=Math.atan2(dx,dz);let c;
@@ -196,7 +223,7 @@ function env3(dx,dy,dz,warm){const el=dy,az=Math.atan2(dx,dz);let c;
   else c=lerp(.1,.03,Math.min(1,-el*3));
   return warm?[c*1.04,c,c*.94]:[c*.96,c,c*1.05]}
 function render3D(cv,P,W,H){
-  const ctx=cv.getContext("2d"),img=ctx.createImageData(W,H),d=img.data,R=rngFor(P.seed,"mb3"),S=(R()*1e6)|0,st=P.style,lava=st==="Lava";
+  const ctx=cv.getContext("2d"),img=ctx.createImageData(W,H),d=img.data,R=rngFor(P.seed,"mb3"),S=(R()*1e6)|0,st=N3[P.style],lava=st==="Lava",glass=st==="Glass";
   const N=Math.round(P.balls),B=[];
   // blobs on a studio floor (or floating in a lamp): clusters, each blob born touching a mate
   const nc=Math.max(1,Math.round(N/3.2)),cs=[];for(let c=0;c<nc;c++){let best=null,bd=-1;for(let t=0;t<12;t++){const x=-1.9+3.8*R(),z=-1.6+2.6*R();let m=9;for(const q of cs)m=Math.min(m,Math.hypot(x-q[0],z-q[1]));if(m>bd){bd=m;best=[x,z]}}cs.push(best)}
@@ -219,15 +246,16 @@ function render3D(cv,P,W,H){
   function trace(ox,oy,oz,dx,dy,dz,tMax,skipSelf){let n=0,t0=1e9,t1=-1;
     for(let i=0;i<N;i++){const b=B[i],cx=b.x-ox,cy=b.y-oy,cz=b.z-oz,tc=cx*dx+cy*dy+cz*dz,d2=cx*cx+cy*cy+cz*cz-tc*tc;if(d2>=b.R2)continue;const h=Math.sqrt(b.R2-d2),a=tc-h,e=tc+h;if(e<=0.001)continue;LST[n++]=i;if(a<t0)t0=a;if(e>t1)t1=e}
     if(!n)return -1;let t=Math.max(t0,skipSelf||0.001),G=0;for(let k=0;k<n;k++)G+=Gs[LST[k]];t1=Math.min(t1,tMax);let prev=t;
-    for(let s=0;s<220&&t<t1;s++){field(ox+dx*t,oy+dy*t,oz+dz*t,LST,n,FO);if(FO[0]>=T){let a=prev,b=t;for(let k=0;k<7;k++){const m=(a+b)/2;field(ox+dx*m,oy+dy*m,oz+dz*m,LST,n,FO);if(FO[0]>=T)b=m;else a=m}TN=n;return b}
-      prev=t;t+=Math.max(.006,(T-FO[0])/G*.9)}
+    const maxStep=Math.min(...[...LST.subarray(0,n)].map(i=>B[i].rr))*.35;
+    for(let s=0;s<600&&t<t1;s++){field(ox+dx*t,oy+dy*t,oz+dz*t,LST,n,FO);if(FO[0]>=T){let a=prev,b=t;for(let k=0;k<7;k++){const m=(a+b)/2;field(ox+dx*m,oy+dy*m,oz+dz*m,LST,n,FO);if(FO[0]>=T)b=m;else a=m}TN=n;return b}
+      prev=t;t+=clamp((T-FO[0])/G*.9,.004,maxStep)}
     return -1}
   let TN=0;
   // soft shadow and contact occlusion from the blobs (sphere approximation)
   function shadowAt(px,py,pz,self){let s=1,ao=1;for(let i=0;i<N;i++){const b=B[i],re=b.rr*1.15,cx=b.x-px,cy=b.y-py,cz=b.z-pz,dist=Math.hypot(cx,cy,cz);if(self&&dist<re*1.25)continue;
-      const tc=cx*Lx+cy*Ly+cz*Lz;if(tc>0){const dp=Math.sqrt(Math.max(0,dist*dist-tc*tc));s*=clamp((dp-re)/(tc*.32+.02)+.5,0,1)}
+      const tc=cx*Lx+cy*Ly+cz*Lz;if(tc>0){const dp=Math.sqrt(Math.max(0,dist*dist-tc*tc));s*=glass?1-.45*(1-clamp((dp-re)/(tc*.32+.02)+.5,0,1)):clamp((dp-re)/(tc*.32+.02)+.5,0,1)}
       ao*=1-.75*Math.min(1,Math.pow(re/Math.max(dist,1e-3),2))*clamp(cy/dist*.5+.6,0,1)}return[s,ao]}
-  const warm=st!=="Iridescent",floorC=st==="Glossy"?L3([236,230,222]):st==="Chrome"?[.05,.05,.055]:[.03,.03,.045];
+  const warm=st!=="Iridescent",floorC=st==="Glossy"||glass?L3(glass?[214,224,232]:[236,230,222]):st==="Chrome"?[.05,.05,.055]:[.03,.03,.045];
   function back(dx,dy,dz){if(lava)return null;return env3(dx,dy,dz,warm)}
   // what a reflected ray sees: other blobs (mirror-ish, one level), the floor, or the studio
   function reflectCol(px,py,pz,dx,dy,dz,depth){
@@ -242,7 +270,7 @@ function render3D(cv,P,W,H){
     const fade=sstep(5,22,dist);const bgc=wall(0);
     return[lerp(c[0],bgc[0],fade),lerp(c[1],bgc[1],fade),lerp(c[2],bgc[2],fade)]}
   // seamless studio backdrop: the floor fades into the same colour the wall starts from
-  function wall(dy){const w=st==="Glossy"?[floorC[0]*.95,floorC[1]*.95,floorC[2]*.95]:[floorC[0]*1.8,floorC[1]*1.8,floorC[2]*2],gk=1-.5*sstep(0,.45,dy);return[w[0]*gk,w[1]*gk,w[2]*gk]}
+  function wall(dy){const w=st==="Glossy"||glass?[floorC[0]*.95,floorC[1]*.95,floorC[2]*.95]:[floorC[0]*1.8,floorC[1]*1.8,floorC[2]*2],gk=1-.5*sstep(0,.45,dy);return[w[0]*gk,w[1]*gk,w[2]*gk]}
   function shade(sx,sy){
     const px=(sx/W*2-1)*fov*asp,py=(1-sy/H*2)*fov;let dx=fx+rx*px+ux*py,dy=fy+ry*px+uy*py,dz=fz+rz*px+uz*py;{const l=Math.hypot(dx,dy,dz);dx/=l;dy/=l;dz/=l}
     const th=trace(eye[0],eye[1],eye[2],dx,dy,dz,60,0);
@@ -250,7 +278,7 @@ function render3D(cv,P,W,H){
       if(lava){const v=sy/H,u=sx/W,haze=fbm2(u*2+3,v*1.2,S+3,4),k=.75+.5*haze;let r=lerp(bg1[0],bg0[0],v)*k,g=lerp(bg1[1],bg0[1],v)*k,b=lerp(bg1[2],bg0[2],v)*k;
         const glow=Math.exp(-Math.pow((v-1.05)*2.2,2))*.9;r+=wax[0]*glow*.5;g+=wax[1]*glow*.35;b+=wax[2]*glow*.2;const vg=1-.55*Math.pow(Math.abs(u-.5)*2,2.4);return[r*vg,g*vg,b*vg,0]}
       if(dy<0){const tf=-eye[1]/dy,qx=eye[0]+dx*tf,qz=eye[2]+dz*tf;let c=floorAt(qx,qz,0,tf);
-        if(st!=="Glossy"){// glossy dark floor: blob reflections
+        if(st!=="Glossy"&&!glass){// glossy dark floor: blob reflections
           const fr=.06+.5*Math.pow(1+dy,5);const rc=trace(qx,0.001,qz,dx,-dy,dz,30,0);if(rc>0){const hx=qx+dx*rc,hy=-dy*rc,hz=qz+dz*rc;field(hx,hy,hz,LST,TN,FO);
             let nx=-FO[1],ny=-FO[2],nz=-FO[3];const nl=Math.hypot(nx,ny,nz)||1;nx/=nl;ny/=nl;nz/=nl;const dn=dx*nx-dy*ny+dz*nz,e=env3(dx-2*dn*nx,-dy-2*dn*ny,dz-2*dn*nz,warm);
             let k=[1,1,1];if(st==="Iridescent"){const f=film(fo+hy*.35+fbm2(hx*.6,hz*.6,S+9,3)*1.4+.4);k=[.15+f[0]*1.05,.15+f[1]*1.05,.15+f[2]*1.05]}
@@ -268,6 +296,16 @@ function render3D(cv,P,W,H){
     if(st==="Chrome"||st==="Iridescent"){const e=reflectCol(hx+nx*.005,hy+ny*.005,hz+nz*.005,rdx,rdy,rdz,0),k=.78+.22*fr;
       let tint=[1,1,1];if(st==="Iridescent"){const t=fo+hy*.35+fbm2(hx*.6,hz*.6,S+9,3)*1.4+(1-ndv)*.9,f=film(t);tint=[.15+f[0]*1.05,.15+f[1]*1.05,.15+f[2]*1.05]}
       const sp=Math.pow(ndh,500)*30*shadowAt(hx,hy,hz,true)[0];col=[e[0]*k*tint[0]*ao1+sp,e[1]*k*tint[1]*ao1+sp,e[2]*k*tint[2]*ao1+sp]}
+    else if(glass){
+      const eta=1/1.45,cI=-dn,k1=1-eta*eta*(1-cI*cI);let tx=eta*dx+(eta*cI-Math.sqrt(Math.max(0,k1)))*nx,ty=eta*dy+(eta*cI-Math.sqrt(Math.max(0,k1)))*ny,tz=eta*dz+(eta*cI-Math.sqrt(Math.max(0,k1)))*nz;
+      // travel through the glass to the far side
+      let t2=.02,ex=hx,ey=hy,ez=hz;for(let k=0;k<80;k++){t2+=.025;ex=hx+tx*t2;ey=hy+ty*t2;ez=hz+tz*t2;field(ex,ey,ez,LST,TN,FO);if(FO[0]<T)break}
+      field(ex,ey,ez,LST,TN,FO);let mx=FO[1],my=FO[2],mz=FO[3];{const l=Math.hypot(mx,my,mz)||1;mx/=l;my/=l;mz/=l}
+      const c2=-(tx*mx+ty*my+tz*mz),eta2=1.45,k2=1-eta2*eta2*(1-c2*c2);let ox,oy,oz;
+      if(k2<0){const dd=tx*mx+ty*my+tz*mz;ox=tx-2*dd*mx;oy=ty-2*dd*my;oz=tz-2*dd*mz}else{ox=eta2*tx+(eta2*c2-Math.sqrt(k2))*(-mx);oy=eta2*ty+(eta2*c2-Math.sqrt(k2))*(-my);oz=eta2*tz+(eta2*c2-Math.sqrt(k2))*(-mz)}
+      // dispersion: each colour bends a little differently
+      col=[0,0,0];for(let c=0;c<3;c++){const sp=1+(c-1)*.06,qx=dx+(ox-dx)*sp,qy=dy+(oy-dy)*sp,qz=dz+(oz-dz)*sp,ql=Math.hypot(qx,qy,qz),bc=reflectCol(ex,ey,ez,qx/ql,qy/ql,qz/ql,1);col[c]=bc[c]*.93}
+      const e=env3(rdx,rdy,rdz,true),fk=.04+.96*Math.pow(1-ndv,5),sp=Math.pow(ndh,400)*25;for(let c=0;c<3;c++)col[c]=col[c]*(1-fk)+e[c]*fk*1.4+sp}
     else if(st==="Glossy"){const ws=w0+w1+w2+1e-9,al=[0,1,2].map(c=>(gp[0][c]*w0+gp[1][c]*w1+gp[2][c]*w2)/ws);
       const [s,ao]=shadowAt(hx,hy,hz,true),dif=Math.max(0,ndl)*s*1.25,amb=(.32+.22*ny)*ao1*ao,wrap=Math.max(0,ndl+.35)/1.35*.18;
       const e=reflectCol(hx+nx*.005,hy+ny*.005,hz+nz*.005,rdx,rdy,rdz,1),cc=.04+.96*Math.pow(1-ndv,5),sp=Math.pow(ndh,180)*9*s+Math.pow(ndh,28)*.3*s;
@@ -284,18 +322,19 @@ function render3D(cv,P,W,H){
   const off=[[.25,.25],[.75,.25],[.25,.75],[.75,.75]];
   for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++){const i=y*W+x,h=hit[i];if(hit[i-1]===h&&hit[i+1]===h&&hit[i-W]===h&&hit[i+W]===h)continue;
     let r=0,g=0,b=0;for(const [a,c] of off){const s=shade(x+a,y+c);r+=s[0];g+=s[1];b+=s[2]}buf[i*3]=r/4;buf[i*3+1]=g/4;buf[i*3+2]=b/4}
-  const ex=lava?1.05:st==="Glossy"?1.15:1.5;
+  const ex=lava?1.05:st==="Glossy"?1.15:glass?1.05:1.5;
   for(let i=0;i<W*H;i++){const gr=(hash2(i%W,(i/W)|0,S)-.5)*.004,o=i*4;d[o]=tmA(buf[i*3]*ex+gr);d[o+1]=tmA(buf[i*3+1]*ex+gr);d[o+2]=tmA(buf[i*3+2]*ex+gr);d[o+3]=255}
   if(lava){ctx.putImageData(img,0,0);ctx.globalCompositeOperation="lighter";const gs=[[.15,.03,.05],[.2,.008,.045],[.88,.06,.02]];for(const [p,w,k] of gs){const g=ctx.createLinearGradient((p-w*2)*W,0,(p+w*2)*W,0);g.addColorStop(0,"rgba(255,255,255,0)");g.addColorStop(.5,"rgba(255,255,255,"+k+")");g.addColorStop(1,"rgba(255,255,255,0)");ctx.fillStyle=g;ctx.fillRect(0,0,W,H)}ctx.globalCompositeOperation="source-over"}
   else ctx.putImageData(img,0,0);
   return "3D · "+st+" · "+N+" blobs"}
 function render(cv,P,W,H){return P.mode==="2D"?render2D(cv,P,W,H):render3D(cv,P,W,H)}
-const ST=[["Chrome","Chrome"],["Glossy","Glossy"],["Lava","Lava"],["Iridescent","Iridescent"]],MD=[["3D","3D"],["2D","2D"]];
-const CFG={id:"metaballs",title:"Metaballs",lead:"Blobs that melt into each other where they touch. In 3D they are ray-marched as a real implicit surface on a studio floor, with reflections of each other, soft shadows and contact occlusion: liquid chrome, glossy plastic, lava-lamp wax lit through its thickness, and an oil-slick film. In 2D the same field becomes graphic: a contour drawing, flat illustration, a retro poster and a holographic gradient. The seed places the blobs.",
+const KEYS=["s1","s2","s3","s4","s5"],ST=KEYS.map(k=>[N3[k],k]),MD=[["3D","3D"],["2D","2D"]];
+const CFG={id:"metaballs",title:"Metaballs",lead:"Blobs that melt into each other where they touch, in two modes. 3D ray-marches a real implicit surface on a studio floor: liquid chrome, clear glass that bends and splits the light, glossy plastic, lava-lamp wax lit through its thickness and an oil-slick film, with reflections, soft shadows and contact occlusion. 2D turns the same idea into graphics: translucent gradient layers, one bold gradient blob, water drops with rainbow rims, a contour drawing and a holographic map. The seed places the blobs.",
   mainW:960,thumbW:300,render,
-  sliders:[{k:"balls",label:"Blobs",min:3,max:22,step:1,v:9},{k:"size",label:"Size",min:.25,max:.8,step:.01,v:.5,fmt:v=>Math.round(v*200)+"%"},{k:"merge",label:"Merge",min:0,max:1,step:.01,v:.55,fmt:v=>Math.round(v*100)+"%"},{k:"light",label:"Light",min:-80,max:80,step:1,v:-30,fmt:v=>v+"°"}],
-  segs:[{k:"mode",label:"Mode",v:"3D",opts:MD},{k:"style",label:"Surface",v:"Chrome",opts:ST}],
-  strips:[{title:"Surface",sub:"Same blobs, four materials, in the selected mode.",k:"style",opts:ST},{title:"Mode",sub:"The same field as a 3D scene or as flat graphics.",k:"mode",opts:MD}]};
+  relabel(state,$){const names=state.mode==="2D"?N2:N3;const g=$("#g_style");if(g)[...g.children].forEach(b=>b.textContent=names[b.dataset.v]);const s0=$("#s_0");if(s0)[...s0.querySelectorAll(".th span")].forEach((sp,i)=>sp.textContent=names[KEYS[i]])},
+  sliders:[{k:"balls",label:"Blobs",min:3,max:22,step:1,v:10},{k:"size",label:"Size",min:.25,max:.8,step:.01,v:.5,fmt:v=>Math.round(v*200)+"%"},{k:"merge",label:"Merge",min:0,max:1,step:.01,v:.55,fmt:v=>Math.round(v*100)+"%"},{k:"light",label:"Light",min:-80,max:80,step:1,v:-30,fmt:v=>v+"°"}],
+  segs:[{k:"mode",label:"Mode",v:"3D",opts:MD},{k:"style",label:"Look",v:"s1",opts:ST}],
+  strips:[{title:"Looks",sub:"Five looks for the selected mode, same seed.",k:"style",opts:ST},{title:"Mode",sub:"The same look as a 3D scene or as 2D graphics.",k:"mode",opts:MD}]};
 startLab(CFG);
 </script>
 </body>
