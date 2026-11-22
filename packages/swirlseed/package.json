@@ -32,6 +32,7 @@
     "deterministic"
   ],
   "license": "MIT",
+  "author": "Peter Alexeev Dauwalter <alexeev.dauwalter@41t.org>",
   "devDependencies": {
     "typescript": "^5.7.0"
   }

@@ -6,6 +6,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
+authors.workspace = true
 keywords = ["generative", "pattern", "seed", "cli", "marbling"]
 categories = ["command-line-utilities", "graphics", "multimedia::images"]
 

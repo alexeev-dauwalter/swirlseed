@@ -7,6 +7,7 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/alexeev-dauwalter/swirlseed"
+authors = ["Peter Alexeev Dauwalter <alexeev.dauwalter@41t.org>"]
 rust-version = "1.77"
 
 [profile.release]
