@@ -9,7 +9,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Mesh gradient · swirlseed labs</title>
-<meta name="description" content="Soft blended mesh gradients from a seed string: colour points melted together in OKLab with a liquid warp.">
+<meta name="description" content="Silky folded mesh gradients with soft and sharp edges, swirls and grain, generated from a seed string.">
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <style>
 :root{--ink:#14151a;--page:#eeeef0}
@@ -121,37 +121,76 @@ function startLab(CFG){
   window.__lab={state,renderTo};
   sync();draw();strips();
 }
-const MOODS={
-  Pastel:{L:[.84,.95],C:[.04,.11],sp:75},
-  Vivid:{L:[.56,.84],C:[.15,.27],sp:150},
-  Dusk:{L:[.3,.74],C:[.08,.18],sp:0},
-  Mono:{L:[.3,.97],C:[.008,.05],sp:10}};
+// cold-press paper: height field (0..1) and a lit version for emboss shading
+function paperHeight(W,H,S,scale){const h=new Float32Array(W*H),m=Math.min(W,H)/ (scale||1);
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const u=x/m,v=y/m;h[y*W+x]=.5*fbm2(u*26,v*26,S+101,3)+.3*fbm2(u*70,v*70,S+102,2)+.2*hash2(x,y,S+103)}return h}
+function paperLight(h,W,H,k){const L=new Float32Array(W*H);for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x,xm=x>0?h[i-1]:h[i],ym=y>0?h[i-W]:h[i];L[i]=1+((h[i]-xm)*.7+(h[i]-ym)*.7)*k}return L}
+function boxBlur(a,W,H,r){if(r<1)return a;const t=new Float32Array(W*H),o=new Float32Array(W*H),n=2*r+1;
+  for(let y=0;y<H;y++){let s=0;const row=y*W;for(let x=-r;x<=r;x++)s+=a[row+clamp(x,0,W-1)];for(let x=0;x<W;x++){t[row+x]=s/n;s+=a[row+Math.min(W-1,x+r+1)]-a[row+Math.max(0,x-r)]}}
+  for(let x=0;x<W;x++){let s=0;for(let y=-r;y<=r;y++)s+=t[clamp(y,0,H-1)*W+x];for(let y=0;y<H;y++){o[y*W+x]=s/n;s+=t[Math.min(H-1,y+r+1)*W+x]-t[Math.max(0,y-r)*W+x]}}return o}
+// one layer of transparent pigment: A = water/pigment coverage (0..1); adds absorbance into Ab (rgb interleaved)
+function pigmentLayer(Ab,A,W,H,pig,o){
+  const m=Math.min(W,H),S=o.S|0,k=pig.map(c=>-Math.log(clamp(c,.02,.999))),Ab1=boxBlur(boxBlur(A,W,H,Math.max(1,Math.round(m*(o.edgeR||.006)))),W,H,Math.max(1,Math.round(m*(o.edgeR||.006))));
+  const fq=o.mottleF||3;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x,a=A[i];if(a<.003)continue;
+    const u=x/m,v=y/m,edge=Math.max(0,a-Ab1[i]),mot=.8+.4*fbm2(u*fq+S*.001,v*fq,S+11,4);
+    let D=a*mot+edge*(o.edge||2.4);
+    if(o.bloom){const n=fbm2(u*(o.bloomF||5),v*(o.bloomF||5),S+21,5),t=o.bloomT||.58,b=sstep(t,t+.015,n);D*=1-.3*b*a;D+=a*.55*o.bloom*Math.exp(-Math.pow((n-t)/.007,2))}
+    const g=o.ph?(1-(o.gran||.5)+(o.gran||.5)*2*o.ph[i]*(.6+.4*fbm2(u*40,v*40,S+31,2))):1;D*=g*(o.strength||1);
+    Ab[i*3]+=D*k[0];Ab[i*3+1]+=D*k[1];Ab[i*3+2]+=D*k[2]}}
+function developPaper(ctx,Ab,W,H,paper,ph,pl){const img=ctx.createImageData(W,H),d=img.data;
+  for(let i=0;i<W*H;i++){const l=pl?pl[i]:1,o=i*4;d[o]=enc(paper[0]*Math.exp(-Ab[i*3])*l);d[o+1]=enc(paper[1]*Math.exp(-Ab[i*3+1])*l);d[o+2]=enc(paper[2]*Math.exp(-Ab[i*3+2])*l);d[o+3]=255}
+  ctx.putImageData(img,0,0)}
+const hex=h=>{const n=parseInt(h.slice(1),16);return[(n>>16)&255,(n>>8)&255,n&255]};
+const toLab=c=>{const l=c.map(v=>Math.pow(v/255,2.2)),L_=Math.cbrt(.4122214708*l[0]+.5363325363*l[1]+.0514459929*l[2]),M_=Math.cbrt(.2119034982*l[0]+.6806995451*l[1]+.1073969566*l[2]),S_=Math.cbrt(.0883024619*l[0]+.2817188376*l[1]+.6299787005*l[2]);
+  return[.2104542553*L_+.793617785*M_-.0040720468*S_,1.9779984951*L_-2.428592205*M_+.4505937099*S_,.0259040371*L_+.7827717662*M_-.808675766*S_]};
+const PALS={
+  Sky:["#eef1f5","#fbfcff","#4f8fe6","#f1ec97","#a7c6f2","#dcd6f2"],
+  Sunset:["#cfe6fb","#3b30e0","#9a45d6","#e27aa2","#f5d2a6","#fbf6c0","#c75a3e"],
+  Lagoon:["#1d8c90","#0c2a44","#d6f7a6","#eef3b4","#c99a1c","#4cbfae"],
+  Neon:["#26369a","#a3288e","#36c4e2","#16246e","#6b36aa","#e04c9a"],
+  Mono:["#f3f3f3","#151515","#8c8c8c","#d6d6d6","#454545"]};
+function seededPal(R){const h=R()*360,out=[];for(let i=0;i<6;i++){const hh=h+[0,40,180,210,-35,90][i]+(R()-.5)*20,L=[.95,.55,.75,.35,.85,.65][i],C=[.03,.18,.14,.12,.08,.16][i],l=oklchFit(L,C,((hh%360)+360)%360);out.push(l)}return out}
 function render(cv,P,W,H){
-  const ctx=cv.getContext("2d"),img=ctx.createImageData(W,H),d=img.data,R=rngFor(P.seed,"mesh"),S=(R()*1e6)|0;
-  const cols=P.points,rows=Math.max(2,Math.round(cols*H/W)),asp=W/H,M=MOODS[P.mood],h0=R()*360,K=cols*rows;
-  const px=[],py=[],lab=[];
-  for(let j=0;j<rows;j++)for(let i=0;i<cols;i++){
-    const x=(i+.5)/cols+(R()-.5)*P.chaos*1.2/cols,y=(j+.5)/rows+(R()-.5)*P.chaos*1.2/rows;
-    let h;
-    if(P.mood==="Dusk")h=lerp(262,22,clamp(y+(R()-.5)*.35,0,1))+(R()-.5)*26;
-    else{h=h0+(R()-.5)*2*M.sp;if(P.mood==="Vivid"&&R()<.22)h+=180}
-    const L=lerp(M.L[0],M.L[1],R()),C=lerp(M.C[0],M.C[1],R());
-    px.push(x*asp);py.push(y);lab.push(oklchFit(L,C,(h%360+360)%360))}
-  const cell=Math.sqrt(asp/K),sig=cell*.82,inv=1/(2*sig*sig),A=P.warp*1.5*cell,fz=.55/cell,gr=P.grain*.075;
-  for(let y=0;y<H;y++){const v0=y/H;for(let x=0;x<W;x++){
-    let u=x/H,v=v0;
-    if(A>0){const wu=fbm2(u*fz+3.1,v*fz+1.7,S,3),wv=fbm2(u*fz+8.2,v*fz+5.9,S+9,3);u+=(wu-.5)*2*A;v+=(wv-.5)*2*A}
-    let sw=0,L=0,a=0,b=0;
-    for(let k=0;k<K;k++){const dx=u-px[k],dy=v-py[k],w=Math.exp(-(dx*dx+dy*dy)*inv);sw+=w;L+=w*lab[k][0];a+=w*lab[k][1];b+=w*lab[k][2]}
-    sw=1/(sw+1e-12);L*=sw;a*=sw;b*=sw;L+=(hash2(x,y,S)-.5)*gr;
-    const l=oklab2lin(L,a,b),i=(y*W+x)*4;d[i]=enc(l[0]);d[i+1]=enc(l[1]);d[i+2]=enc(l[2]);d[i+3]=255}}
-  ctx.putImageData(img,0,0);return P.mood+" · "+cols+"×"+rows+" points"}
-const CFG={id:"mesh-gradient",title:"Mesh gradient",lead:"The soft, blended gradients used as backgrounds in modern interfaces. Colour points sit on a loose grid and melt into each other in OKLab, a little liquid warp keeps it organic. The seed picks the hues, lightness and positions.",
+  const ctx=cv.getContext("2d"),img=ctx.createImageData(W,H),d=img.data,R=rngFor(P.seed,"mesh2"),S=(R()*1e6)|0,asp=W/H;
+  const pal=P.palette==="Random"?seededPal(R):PALS[P.palette].map(c=>toLab(hex(c)));
+  const pick=()=>pal[(R()*pal.length)|0];const order=pal.map((c,i)=>[R(),c]).sort((a,b)=>a[0]-b[0]).map(a=>a[1]);
+  // backdrop: a few very wide colour fields melted together
+  const bp=[];for(let i=0;i<6;i++)bp.push({x:asp*(-.15+1.3*R()),y:-.15+1.3*R(),c:order[i%order.length],s:.28+.3*R()});
+  // layers: big folded sheets, each with an edge that is crisp in places and misty in others
+  const K=Math.round(P.folds),L=[];
+  for(let k=0;k<K;k++){const arc=R()<.35,th=(R()-.5)*1.6+(R()<.5?0:Math.PI/2*(R()-.5)),edge=pick();let deep=pick();for(let t=0;t<4&&deep===edge;t++)deep=pick();
+    L.push({arc,cx:asp*(-.2+1.4*R()),cy:-.2+1.4*R(),r:.35+.6*R(),c:.2+.6*R(),th,a:.08+.22*R(),f:1.2+2.2*R(),ph:R()*TAU,a2:.03+.06*R(),f2:3+3*R(),ph2:R()*TAU,
+      side:R()<.5?1:-1,edge,deep,third:pick(),depth:.12+.35*R(),sh:.05+.15*R(),off:R()*50,op:.55+.4*R(),fade:.15+.35*R(),gf:.6+1.4*R()})}
+  const vx=asp*(.25+.5*R()),vy=.25+.5*R(),vs=(R()<.5?1:-1)*(2.2+2*R())*P.swirl,vr=.18+.25*R();
+  const soft=P.soft,gr=P.grain*.11,mix=(a,b,t)=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];
+  for(let y=0;y<H;y++){const v0=y/H;for(let x=0;x<W;x++){let u=x/H,v=v0;
+    // liquid warp, then a vortex that winds the sheets into a swirl
+    u+=(fbm2(u*1.1+3,v*1.1,S,3)-.5)*.35*P.flow;v+=(fbm2(u*1.1,v*1.1+7,S+1,3)-.5)*.35*P.flow;
+    {const dx=u-vx,dy=v-vy,r2=dx*dx+dy*dy,a=vs*Math.exp(-r2/(vr*vr)),c=Math.cos(a),s=Math.sin(a);u=vx+dx*c-dy*s;v=vy+dx*s+dy*c}
+    let sw=0,c=[0,0,0];for(const p of bp){const dx=u-p.x,dy=v-p.y,w=Math.exp(-(dx*dx+dy*dy)/(p.s*p.s));sw+=w;c[0]+=p.c[0]*w;c[1]+=p.c[1]*w;c[2]+=p.c[2]*w}
+    c=[c[0]/sw,c[1]/sw,c[2]/sw];
+    for(const l of L){let sd,along;
+      if(l.arc){const dx=u-l.cx,dy=v-l.cy,dd=Math.hypot(dx,dy);sd=(l.r-dd)*l.side;along=Math.atan2(dy,dx)*l.r}
+      else{const ct=Math.cos(l.th),st=Math.sin(l.th),uu=u*ct+v*st,vv=-u*st+v*ct,y0=l.c+l.a*Math.sin(uu*l.f+l.ph)+l.a2*Math.sin(uu*l.f2+l.ph2),sl=l.a*l.f*Math.cos(uu*l.f+l.ph)+l.a2*l.f2*Math.cos(uu*l.f2+l.ph2);sd=(vv-y0)/Math.sqrt(1+sl*sl)*l.side;along=uu}
+      // edge sharpness wanders along the fold: razor-thin turning into fog
+      const sv=vnoise(along*1.6+l.off,.5,S+7),s=.004+(.03+.38*soft)*Math.pow(sv,1.2)+.03*soft;
+      const a=sstep(-s,s,sd);
+      // the fold catches light at its edge and darkens into the sheet; it also casts a soft shadow
+      if(sd<0){const shd=Math.exp(sd/l.sh)*.15;c=[c[0]*(1-shd),c[1],c[2]]}
+      if(a>0){// colour slides along the fold and darkens into it; the sheet thins out away from its edge
+        const t=sstep(0,l.depth,sd),g=.5+.5*Math.sin(along*l.gf+l.off),lc=mix(mix(l.edge,l.third,g*.7),l.deep,t),hi=Math.exp(-Math.max(0,sd)/(s*2+.012))*.07;
+        const al=a*l.op*(.3+.7*Math.exp(-Math.max(0,sd)/l.fade));c=mix(c,[lc[0]+hi,lc[1],lc[2]],al)}}
+    const n=gr*((hash2(x,y,S)+hash2(x,y,S+1)-1)*1.4),l=oklab2lin(c[0]+n*(.6+.4*c[0]),c[1]*1.2,c[2]*1.2),i=(y*W+x)*4;
+    d[i]=enc(l[0]);d[i+1]=enc(l[1]);d[i+2]=enc(l[2]);d[i+3]=255}}
+  ctx.putImageData(img,0,0);return P.palette+" · "+K+" folds"}
+const PL=[["Sky","Sky"],["Sunset","Sunset"],["Lagoon","Lagoon"],["Neon","Neon"],["Mono","Mono"],["Random","Random"]];
+const CFG={id:"mesh-gradient",title:"Mesh gradient",lead:"Soft gradients like blurred folded silk: wide colour fields melted in OKLab, sheets that fold over with an edge that is razor-sharp in one place and pure mist in another, a slow vortex, soft shadows under the folds and film grain. The seed shapes every fold.",
   mainW:960,thumbW:300,render,
-  sliders:[{k:"points",label:"Points",min:3,max:6,step:1,v:4},{k:"chaos",label:"Chaos",min:0,max:1,step:.01,v:.6,fmt:v=>Math.round(v*100)+"%"},{k:"warp",label:"Warp",min:0,max:1,step:.01,v:.4,fmt:v=>Math.round(v*100)+"%"},{k:"grain",label:"Grain",min:0,max:1,step:.01,v:.35,fmt:v=>Math.round(v*100)+"%"}],
-  segs:[{k:"mood",label:"Mood",v:"Pastel",opts:[["Pastel","Pastel"],["Vivid","Vivid"],["Dusk","Dusk"],["Mono","Mono"]]}],
-  strips:[{title:"Mood",sub:"Same seed, four colour moods.",k:"mood",opts:[["Pastel","Pastel"],["Vivid","Vivid"],["Dusk","Dusk"],["Mono","Mono"]]},
-          {title:"Points",sub:"From a few big washes of colour to a finely woven mesh.",k:"points",opts:[["3",3],["4",4],["5",5],["6",6]]}]};
+  sliders:[{k:"folds",label:"Folds",min:0,max:6,step:1,v:2},{k:"soft",label:"Softness",min:0,max:1,step:.01,v:.65,fmt:v=>Math.round(v*100)+"%"},{k:"swirl",label:"Swirl",min:0,max:1,step:.01,v:.45,fmt:v=>Math.round(v*100)+"%"},{k:"flow",label:"Flow",min:0,max:1,step:.01,v:.5,fmt:v=>Math.round(v*100)+"%"},{k:"grain",label:"Grain",min:0,max:1,step:.01,v:.4,fmt:v=>Math.round(v*100)+"%"}],
+  segs:[{k:"palette",label:"Palette",v:"Sunset",opts:PL}],
+  strips:[{title:"Palette",sub:"Same seed, six colour sets.",k:"palette",opts:PL},
+          {title:"Folds",sub:"From a plain gradient to layered silk.",k:"folds",opts:[["0",0],["2",2],["4",4],["6",6]]}]};
 startLab(CFG);
 </script>
 </body>
