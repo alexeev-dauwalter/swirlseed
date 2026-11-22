@@ -9,7 +9,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Wet on wet · swirlseed labs</title>
-<meta name="description" content="Soft wet-on-wet watercolour washes with blooms, generated from a seed string.">
+<meta name="description" content="Wet-on-wet watercolour with feathered edges, granulation and blooms, generated from a seed string.">
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <style>
 :root{--ink:#14151a;--page:#eeeef0}
@@ -121,29 +121,53 @@ function startLab(CFG){
   window.__lab={state,renderTo};
   sync();draw();strips();
 }
-const WP={Dusk:[[68,60,150],[196,86,120],[236,150,96],[60,120,170],[246,206,120]],Ocean:[[20,70,140],[30,150,170],[90,190,190],[40,50,120],[150,200,230]],Bloom:[[214,70,110],[240,130,90],[150,80,170],[250,190,110],[90,110,190]],Earth:[[150,90,50],[196,140,70],[88,100,60],[120,60,50],[210,180,120]]};
+// cold-press paper: height field (0..1) and a lit version for emboss shading
+function paperHeight(W,H,S,scale){const h=new Float32Array(W*H),m=Math.min(W,H)/ (scale||1);
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const u=x/m,v=y/m;h[y*W+x]=.5*fbm2(u*26,v*26,S+101,3)+.3*fbm2(u*70,v*70,S+102,2)+.2*hash2(x,y,S+103)}return h}
+function paperLight(h,W,H,k){const L=new Float32Array(W*H);for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x,xm=x>0?h[i-1]:h[i],ym=y>0?h[i-W]:h[i];L[i]=1+((h[i]-xm)*.7+(h[i]-ym)*.7)*k}return L}
+function boxBlur(a,W,H,r){if(r<1)return a;const t=new Float32Array(W*H),o=new Float32Array(W*H),n=2*r+1;
+  for(let y=0;y<H;y++){let s=0;const row=y*W;for(let x=-r;x<=r;x++)s+=a[row+clamp(x,0,W-1)];for(let x=0;x<W;x++){t[row+x]=s/n;s+=a[row+Math.min(W-1,x+r+1)]-a[row+Math.max(0,x-r)]}}
+  for(let x=0;x<W;x++){let s=0;for(let y=-r;y<=r;y++)s+=t[clamp(y,0,H-1)*W+x];for(let y=0;y<H;y++){o[y*W+x]=s/n;s+=t[Math.min(H-1,y+r+1)*W+x]-t[Math.max(0,y-r)*W+x]}}return o}
+// one layer of transparent pigment: A = water/pigment coverage (0..1); adds absorbance into Ab (rgb interleaved)
+function pigmentLayer(Ab,A,W,H,pig,o){
+  const m=Math.min(W,H),S=o.S|0,k=pig.map(c=>-Math.log(clamp(c,.02,.999))),Ab1=boxBlur(boxBlur(A,W,H,Math.max(1,Math.round(m*(o.edgeR||.006)))),W,H,Math.max(1,Math.round(m*(o.edgeR||.006))));
+  const fq=o.mottleF||3;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x,a=A[i];if(a<.003)continue;
+    const u=x/m,v=y/m,edge=Math.max(0,a-Ab1[i]),mot=.8+.4*fbm2(u*fq+S*.001,v*fq,S+11,4);
+    let D=a*mot+edge*(o.edge||2.4);
+    if(o.bloom){const n=fbm2(u*(o.bloomF||5),v*(o.bloomF||5),S+21,5),t=o.bloomT||.58,b=sstep(t,t+.015,n);D*=1-.3*b*a;D+=a*.55*o.bloom*Math.exp(-Math.pow((n-t)/.007,2))}
+    const g=o.ph?(1-(o.gran||.5)+(o.gran||.5)*2*o.ph[i]*(.6+.4*fbm2(u*40,v*40,S+31,2))):1;D*=g*(o.strength||1);
+    Ab[i*3]+=D*k[0];Ab[i*3+1]+=D*k[1];Ab[i*3+2]+=D*k[2]}}
+function developPaper(ctx,Ab,W,H,paper,ph,pl){const img=ctx.createImageData(W,H),d=img.data;
+  for(let i=0;i<W*H;i++){const l=pl?pl[i]:1,o=i*4;d[o]=enc(paper[0]*Math.exp(-Ab[i*3])*l);d[o+1]=enc(paper[1]*Math.exp(-Ab[i*3+1])*l);d[o+2]=enc(paper[2]*Math.exp(-Ab[i*3+2])*l);d[o+3]=255}
+  ctx.putImageData(img,0,0)}
 const L3=a=>a.map(c=>Math.pow(c/255,2.2));
+const WP={Dusk:[[[60,50,150],.8],[[200,70,110],.3],[[235,140,70],.2],[[40,100,160],.6],[[245,200,90],.1]],
+  Ocean:[[[20,70,150],.8],[[20,140,160],.5],[[80,170,170],.4],[[30,40,110],.9],[[120,180,200],.3]],
+  Bloom:[[[215,50,100],.2],[[240,120,70],.2],[[140,60,160],.5],[[250,190,70],.1],[[70,90,180],.6]],
+  Earth:[[[150,80,40],.8],[[190,130,50],.6],[[80,90,50],.5],[[110,50,40],.8],[[60,70,100],.9]]};
 function render(cv,P,W,H){
-  const ctx=cv.getContext("2d"),img=ctx.createImageData(W,H),d=img.data,R=rngFor(P.seed,"wew"),S=(R()*1e6)|0,asp=W/H,m=Math.min(W,H);
-  const n=Math.round(P.washes),pal=WP[P.palette],ws=[];
-  for(let i=0;i<n;i++){const c=L3(pal[(R()*pal.length)|0]);ws.push({x:R()*asp,y:R(),r:.22+.3*R(),c:[1-(1-c[0])*1.0,1-(1-c[1])*1.0,1-(1-c[2])*1.0],cc:c,ox:R()*40,oy:R()*40,k:.55+.4*R()})}
-  const paper=L3([248,243,232]),fl=1.4,wa=P.flow*.55,soft=.025+.11*P.water,bl=P.bloom;
-  for(let y=0;y<H;y++){const v0=y/H;for(let x=0;x<W;x++){
-    const u0=x/H;
-    const wu=fbm2(u0*fl+3,v0*fl+1,S,4)-.5,wv=fbm2(u0*fl+9,v0*fl+5,S+7,4)-.5,u=u0+wu*wa*1.4,v=v0+wv*wa*1.4;
-    let r=paper[0],g=paper[1],b=paper[2];
-    for(let k=0;k<n;k++){const w=ws[k],dx=u-w.x,dy=v-w.y,q=Math.sqrt(dx*dx+dy*dy)/w.r,nz=fbm2(u*2.6+w.ox,v*2.6+w.oy,S+k*5,6),nq=fbm2(u*7+w.oy,v*7+w.ox,S+k*5+3,4),f=(1-q)*.8+(nz-.5)*(1.1+1.1*P.flow)+(nq-.5)*.35;
-      let dn=sstep(-soft,soft,f-.05);const edge=Math.exp(-Math.pow((f-.05)/(soft*.55),2));dn=dn*(.4+.9*nq*nz*1.6)+bl*.45*edge*dn+bl*.25*edge;
-      dn=clamp(dn*w.k*1.3,0,.95);r*=1-dn*(1-w.cc[0]);g*=1-dn*(1-w.cc[1]);b*=1-dn*(1-w.cc[2])}
-    const gr=1-P.grain*(.06*(hash2(x,y,S)-.5)*2+.12*(fbm2(x/m*30,y/m*30,S+4,3)-.5)),i=(y*W+x)*4;
-    d[i]=enc(r*gr);d[i+1]=enc(g*gr);d[i+2]=enc(b*gr);d[i+3]=255}}
-  ctx.putImageData(img,0,0);return P.palette+" · "+n+" washes"}
+  const ctx=cv.getContext("2d"),R=rngFor(P.seed,"wew2"),S=(R()*1e6)|0,asp=W/H,m=Math.min(W,H),pal=WP[P.palette].map(([c,g])=>[L3(c),g]);
+  const n=Math.round(P.washes),ph=paperHeight(W,H,S,1),pl=paperLight(ph,W,H,1.1),Ab=new Float32Array(W*H*3);
+  // the sheet is wetted first: how wet each spot is decides how far pigment travels
+  const wetC=[R()*asp,R()],wetR=.5+.6*P.water;
+  for(let k=0;k<n;k++){
+    const cx=asp*(.08+.84*R()),cy=.08+.84*R(),r=.18+.24*R()+(k<2?.12:0),[pig,gr]=pal[(R()*pal.length)|0],ox=R()*50,oy=R()*50;
+    const soft=.03+.16*P.water,A=new Float32Array(W*H),sharp=R()<.5;
+    for(let y=0;y<H;y++){const v=y/H;for(let x=0;x<W;x++){const u=x/H;
+      const wu=(fbm2(u*1.3+ox,v*1.3+oy,S+k,4)-.5)*P.flow*.6,wv=(fbm2(u*1.3+oy,v*1.3+ox,S+k+40,4)-.5)*P.flow*.6;
+      const dx=(u+wu-cx)/r,dy=(v+wv-cy)/r,q=Math.sqrt(dx*dx+dy*dy),nz=fbm2(u*3+ox,v*3+oy,S+k*7,6),wet=clamp(1-Math.hypot(u-wetC[0],v-wetC[1])/wetR/asp*1.4,0,1);
+      const f=1-q+(nz-.5)*(.7+.6*P.flow),s=soft*(.4+1.6*wet)*(sharp?.6:1);
+      // feathered front: pigment thins out over a long soft gradient on wet paper
+      A[y*W+x]=sstep(-s,s*.6,f)*(.55+.45*sstep(0,.5,f))}}
+    pigmentLayer(Ab,A,W,H,pig,{S:S+k*17,ph,gran:gr*.55,edge:P.bloom*2.6*(sharp?1:.4),edgeR:.004+.006*P.water,mottleF:2.5,bloom:R()<P.bloom?1:0,bloomF:3+3*R(),bloomT:.55+.08*R(),strength:.6+.5*R()})}
+  developPaper(ctx,Ab,W,H,L3([248,244,234]),ph,pl);return P.palette+" · "+n+" washes"}
 const WL=[["Dusk","Dusk"],["Ocean","Ocean"],["Bloom","Bloom"],["Earth","Earth"]];
-const CFG={id:"wet-on-wet",title:"Wet on wet",lead:"Pigment dropped onto soaking paper: no hard outlines, just colour that drifts, feathers and pools, with darker blooming fronts where the water stops. The seed sets where each drop lands.",
+const CFG={id:"wet-on-wet",title:"Wet on wet",lead:"Pigment dropped onto soaking paper: colour feathers out with no hard outline, mixes where washes meet, settles into the grain and, where the water runs back into damp paint, blooms into cauliflower edges. The seed sets where each drop lands.",
   mainW:960,thumbW:300,render,
-  sliders:[{k:"washes",label:"Washes",min:2,max:8,step:1,v:5},{k:"flow",label:"Flow",min:0,max:1,step:.01,v:.55,fmt:v=>Math.round(v*100)+"%"},{k:"water",label:"Water",min:0,max:1,step:.01,v:.55,fmt:v=>Math.round(v*100)+"%"},{k:"bloom",label:"Bloom",min:0,max:1,step:.01,v:.4,fmt:v=>Math.round(v*100)+"%"},{k:"grain",label:"Grain",min:0,max:1,step:.01,v:.6,fmt:v=>Math.round(v*100)+"%"}],
+  sliders:[{k:"washes",label:"Washes",min:2,max:8,step:1,v:5},{k:"flow",label:"Flow",min:0,max:1,step:.01,v:.55,fmt:v=>Math.round(v*100)+"%"},{k:"water",label:"Water",min:0,max:1,step:.01,v:.55,fmt:v=>Math.round(v*100)+"%"},{k:"bloom",label:"Bloom",min:0,max:1,step:.01,v:.45,fmt:v=>Math.round(v*100)+"%"}],
   segs:[{k:"palette",label:"Palette",v:"Dusk",opts:WL}],
-  strips:[{title:"Palette",sub:"Four pigment families.",k:"palette",opts:WL},{title:"Water",sub:"Dry-ish and crisp to fully drowned and soft.",k:"water",opts:[["Damp",.1],["Wet",.5],["Soaked",.85],["Flooded",1]]}]};
+  strips:[{title:"Palette",sub:"Four pigment families.",k:"palette",opts:WL},{title:"Water",sub:"Damp and crisp to fully flooded.",k:"water",opts:[["Damp",.1],["Wet",.5],["Soaked",.8],["Flooded",1]]}]};
 startLab(CFG);
 </script>
 </body>
