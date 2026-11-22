@@ -1,0 +1,14 @@
+[workspace]
+members = ["crates/swirlseed", "crates/swirlseed-cli"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/alexeev-dauwalter/swirlseed"
+rust-version = "1.77"
+
+[profile.release]
+lto = true
+codegen-units = 1

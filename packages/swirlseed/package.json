@@ -1,0 +1,38 @@
+{
+  "name": "swirlseed",
+  "version": "0.1.0",
+  "description": "Deterministic fluid, glassy marbling patterns generated from a string seed. Byte-identical with the Rust crate.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test \"test/*.test.mjs\"",
+    "golden": "npm run build && UPDATE_GOLDEN=1 node --test \"test/*.test.mjs\""
+  },
+  "keywords": [
+    "generative",
+    "pattern",
+    "seed",
+    "marbling",
+    "gradient",
+    "halftone",
+    "procedural",
+    "deterministic"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}
