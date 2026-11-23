@@ -1,7 +1,8 @@
 /* swirlseed site — shared styles. © 2026 Peter Alexeev Dauwalter */
 :root{--ink:#14151a;--page:#eeeef0}
 *{box-sizing:border-box;margin:0}
-body{overflow-x:clip}
+html,body{overflow-x:clip}
+@supports not (overflow:clip){html,body{overflow-x:hidden}}
 html{background:var(--page)}
 body{min-height:100vh;font:15px/1.35 ui-sans-serif,-apple-system,"SF Pro Display","Inter",system-ui,sans-serif;color:var(--ink);
   background:radial-gradient(circle,rgba(20,20,40,.13) 1px,transparent 1.6px) 0 0/22px 22px,var(--page);
@@ -94,9 +95,12 @@ header p{color:#6b6a78;margin-top:6px}
 .sc:nth-child(1){transform:translate(-26%,4%) rotate(-12deg)}
 .sc:nth-child(2){transform:translate(26%,6%) rotate(11deg)}
 .sc:nth-child(3){transform:translate(0,-3%) rotate(-1deg)}
+/* spread the fan only with a real pointer: on touch screens :hover sticks after a tap */
+@media(hover:hover){
 .stack:hover .sc:nth-child(1){transform:translate(-40%,6%) rotate(-17deg)}
 .stack:hover .sc:nth-child(2){transform:translate(40%,8%) rotate(16deg)}
 .stack:hover .sc:nth-child(3){transform:translate(0,-8%) rotate(0)}
+}
 footer{max-width:1180px;margin:56px auto 0;display:flex;justify-content:space-between;color:#7a7888;font-size:13px}
 
 /* ---------- page sections ---------- */
@@ -163,10 +167,11 @@ input[type=range]{width:100%;accent-color:#14151a}
 @media(max-width:900px){.inst{grid-template-columns:1fr}}
 
 /* one grid for every example: identical 340px cells, centred as a block */
-.ex-grid{display:grid;grid-template-columns:repeat(auto-fit,340px);justify-content:center;align-items:center;gap:44px 36px}
-.ex-grid>*{justify-self:center}
+.ex-grid{display:grid;grid-template-columns:repeat(auto-fit,min(340px,100%));justify-content:center;align-items:center;gap:44px 36px}
+.ex-grid>*{justify-self:center;max-width:100%}
 .ex-grid .folder{margin:0}
-.ex-grid .card{width:340px;height:340px;aspect-ratio:auto}
+.ex-grid .card{width:min(340px,100%);height:auto;aspect-ratio:1}
+#examples{overflow-x:clip;overflow-y:visible;padding-block:24px;margin-block:-24px}
 
 /* ---------- small screens ---------- */
 .inst>*,.gen>*,.panel,.code{min-width:0}
@@ -243,3 +248,6 @@ header p{max-width:620px}
 .icard code{font:12.5px ui-monospace,"SF Mono",Menlo,monospace;background:#eceaf2;border-radius:6px;padding:1px 5px}
 @media(max-width:600px){.catalog{grid-template-columns:minmax(0,1fr)}.gcard.hero{grid-column:auto;grid-row:auto}.gcard.hero .gthumb{aspect-ratio:3/2;flex:none;min-height:0}
   .strip-row{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* folders use fixed-size glass shapes: scale them down on the narrowest phones */
+@media(max-width:376px){.ex-grid .folder{zoom:.95}}
+@media(max-width:350px){.ex-grid .folder{zoom:.86}}
