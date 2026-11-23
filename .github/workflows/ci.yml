@@ -46,4 +46,4 @@ jobs:
         run: |
           npm install --no-audit --no-fund
           npm run golden
-      - run: git diff --exit-code -- crates/swirlseed/testdata/golden.txt
+      - run: git diff --exit-code -- crates/swirlseed/testdata/golden.txt crates/swirlseed/testdata/generators.txt

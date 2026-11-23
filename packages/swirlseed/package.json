@@ -1,6 +1,6 @@
 {
   "name": "swirlseed",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Deterministic fluid, glassy marbling patterns generated from a string seed. Byte-identical with the Rust crate.",
   "type": "module",
   "main": "./dist/index.js",

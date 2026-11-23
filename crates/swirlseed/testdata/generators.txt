@@ -1,0 +1,52 @@
+sky-default	sky	Hello, world!	96	60	-	0e350b4e43e592269f09aca66f57bdec29d1fe7b77779dea8865496d506e8bc3
+sky-noon-strato	sky	noon	96	60	time=12.5,type=stratocumulus,cover=0.7	db1cf11e84f43b6a7a95bdd2d43b0e58fb52d62011730e19001abfe6aedb3b21
+sky-dawn-cirrus	sky	dawn	96	60	time=6.6,type=cirrus,cover=0.6	8571909fb871f0fcc660a444ee0ef5c428ffbef805e503993906f048fa0d6578
+sky-night-moon	sky	night	96	60	time=23,moon=0.5,cover=0.2	40fcd56116ad86dcce446b69339b4b66f8738c14bfda08a8531f183915f8430b
+sky-dusk-stratus	sky	dusk	96	60	time=19.2,type=stratus,cover=1,haze=0.8	ca77d4124692b066826686a1333151ece7ae0920f2f7525ec0bae7b26a0435d5
+ebru-default	ebru	Hello, world!	96	64	-	3769496346db331991e1fd0d2c535d92514149088a377998093b9b7f40f870ea
+ebru-battal	ebru	Пётр	96	64	style=battal,palette=deniz	c12ec32f63ae639474725dafe825e0300ad29d636ad9f01b5da729a9f8379bf6
+ebru-gel-git	ebru	Autelon	96	64	style=gel-git,palette=klasik,density=1.4	3d1abd9031c5d63c020c4785f4251f00b20eb438c8a7f2812a6d1bfe35d04c70
+ebru-bulbul	ebru	Kinsward	96	64	style=bulbul-yuvasi,palette=gul	0715846e5143cafe9511b74b9432d29a798e326e1a29a8a938c902d008b8c2c3
+ebru-hatip	ebru	Granite	96	64	style=hatip,palette=toprak,size=1.5	2eafd0bc3219218a3e29adb7f454cd56aa1da0f622b5982194dafea704e7b573
+sumi-default	suminagashi	Hello, world!	96	64	-	b56a39fd33cc41d0d82d27c0f5164026802b93f12228ca308551bd1fbdd48a6a
+sumi-ai	suminagashi	ai	96	64	ink=ai,rings=50,breath=0	f5ef0eaa03c3a72b507661846224b382339f90f9585ff9679d818a2161383a35
+sumi-mixed	suminagashi	mixed	96	64	ink=sumi-ai,centers=3	7ad046be63fa8cb4ed086234d5717aca9f2f0b5a94eb5afab8803dcb367b50ec
+sumi-beni	suminagashi	beni	96	64	ink=beni,breath=1	098713d4ca9ab709154c0f4048ece73a58a4565bf053f9875bbf9951fbc50690
+mesh-default	mesh-gradient	Hello, world!	96	64	-	43530ea2c67a8cfa08112f7c777f1f155fad109a2efa5c343730404c9fdfcdee
+mesh-random	mesh-gradient	random	96	64	palette=random,folds=5	c712af62efdcacc7dc6cfd3e107c7d23bd6756dee80023dd50fe7ee404261ef8
+mesh-sky	mesh-gradient	sky	64	96	palette=sky,folds=0,grain=0	2cade229a9e65ad35098f8ea2b1505fbc3cd31a70467f1cc9a1f41215df1f5f1
+mesh-neon	mesh-gradient	neon	96	64	palette=neon,swirl=1,flow=1	73fd6c338deea6129194ed1d273c5c5d8d03cf40929edc9cc455956930b31e6f
+flow-default	flow-field	Hello, world!	96	64	-	cc697f31abc51b7db7fb3509476b7b6b7ca5e826fcaf1b653e0eaa8fbdef7f70
+flow-neon	flow-field	neon	96	64	style=neon	70aec2be7f23ff4382415017e8b59b23a8ee1da561771fc2325cfb1796a43a4d
+flow-gold	flow-field	gold	96	64	style=gold,swirl=3	b10e1b748dc650b28b26ddfe189c57921d4fbd5979cf717921e028e6be1ea90b
+flow-sunset	flow-field	sunset	96	64	style=sunset,spacing=0.02,length=0.2	f93788859a93dc626be8f9e4a7184200444f756a5cae2201a25082ce05ead383
+watercolor-default	watercolor	Hello, world!	96	64	-	453f1a07446c6d0c82321d42690df8006a5efd1b9510ac731c0d86ee2f22cf4d
+watercolor-sepia	watercolor	sepia	96	64	palette=sepia,washes=3,bleed=1,splatter=1	23ccec5013ece0f111617843b29b5b6de2baaf23c1f0a78bcbb6a36392704f13
+wet-default	wet-on-wet	Hello, world!	96	64	-	d643e16e9e10a00b9b7e17fe126f719e8ff25fe54d51ea5458f7441208547a52
+wet-ocean	wet-on-wet	ocean	96	64	palette=ocean,water=1,bloom=1	a12d926ddfcaa661972878ce9ea9671c6fbef5292294d243eec5535343acfa36
+aurora-default	aurora	Hello, world!	96	60	-	84662ae86358e32aec20a0e64f097bd0cf7217d9671fa6cd101da76919a6875d
+aurora-mixed	aurora	mixed	96	60	colour=mixed,curtains=3,intensity=2	aba673d3d2ac12e0040ec4a1f1ad364e74c5b64ec14fa3cf5f3096c34f807c12
+aurora-violet	aurora	violet	96	60	colour=violet,curtains=1,stars=0	572ccc725838a55464554847e77dc90d4cc50962964b0ce05aace0dafac63c52
+planets-rocky	planets	Hello, world!	96	64	-	49daeebe77d2debadb9cd375a900188e408d424d6d985d3eea54dcff86000cbd
+planets-ice	planets	ice	96	64	type=ice,sun=40	b766483f7d590db48062b5eaeff4bc77e84a0ecf958c72469cfca0538aa1c993
+planets-gas	planets	gas	96	64	type=gas-giant,sun=0	0b1682222384f98a7b43feb98846b94b9c3f3971be1cc8a8d9057f279bf38f9d
+planets-ringed	planets	ringed	96	64	type=ringed-giant,sun=-150	a6042b5a71559280cbbcafb91eaa5ad1f9a9576b53e61138d4bd74eae3131c1c
+planets-nebula	planets	nebula	160	100	type=nebula	eed5a47ff98204e60b413259e1cc6533fde9adcabe8d72c646a89236a3973590
+dendritic-default	dendritic-painting	Hello, world!	96	64	-	2a5dec52628e051a4b8e3675eaa9698338eb027d3029024454c5849fa3d8ee3f
+dendritic-centre	dendritic-painting	centre	96	64	origin=centre,palette=ember	cb78874bcc7fe4a4c5454d9ab0106a04f66a193dfc362d85f647ef787a0b494e
+dendritic-scatter	dendritic-painting	scatter	96	64	origin=scatter,palette=spectrum,weight=2	39712529b88bdf502525a4bd53f7d4638dde3509766fde7f2a2253328fc5a5c2
+paste-waves	paste-paper	Hello, world!	96	64	-	676581575637d1b4c3e2d3ef75ebf43803b0328c8885da40b905512676a57edd
+paste-basket	paste-paper	basket	96	64	pattern=basket,colour=terracotta	189097649838b88fec50121315597ccc9dc3ae0237b757a20998d16a5761f687
+paste-rings	paste-paper	rings	96	64	pattern=rings,colour=plum	ad1bda557db4327b63630a81140d5d85981398a0a9dd217fab57ace29d3b551b
+paste-stamped	paste-paper	stamped	96	64	pattern=stamped,colour=ochre	109ea74564bf046587a67e8694dff37c91fb632815f1a14d105750d8cd864f0b
+metaballs-chrome	metaballs	Hello, world!	96	64	-	bb47d2c4f883a367128aadb2a145c1db60203335f0041489882d3def92be2668
+metaballs-glass	metaballs	glass	96	64	look=glass	1e72667e60b99f0ab65715133d86c53acb6731c107de44ac44780e04205d7787
+metaballs-glossy	metaballs	glossy	96	64	look=glossy,balls=16	86fbb3357bb9521e74ff1ffa09a728824e77c83d6ba4de4229ec8ebf8253d3b1
+metaballs-lava	metaballs	lava	96	64	look=lava	1e551f90a9416669fc4ee1c1d24ebac1c02986bbf83224ec9a2938b8fbad51c8
+metaballs-iridescent	metaballs	iridescent	96	64	look=iridescent,light=40	e953d0b05546f6a101b92c4290ca477536afa632a2eb8736f2e1854786727e11
+metaballs-layers	metaballs	layers	96	64	look=layers	512092facd5a8ba0c62e696b96e023c340222b6a48de048f2b1ffd5c717edc3b
+metaballs-gradient	metaballs	gradient	96	64	look=gradient	46b727ebbd1d4fadc734871339efdf7f518f3acd36d5bb5fede3ca1a52496640
+metaballs-drops	metaballs	drops	96	64	look=drops,balls=18	a274274d297075f6cf114fcc439a643ea31058391900988e9102190ef28819a6
+metaballs-contour	metaballs	contour	96	64	look=contour,merge=1	54f037b132c9739382e3dd9fbe97f53e2e26e6b041c679b2bd8734ba010d146d
+metaballs-holo	metaballs	holo	96	64	look=holo,size=0.8	43a3739cbfeb350a4282225b8fc096a209bb500b7bb63147ef23baa7ee69fc9f
+dmath-inverse	-	-	0	0	-	2fde947937f64ad56ea4e4261bb5b55e4d0db1abc7a7a54dc15e22dc6c2d9cde

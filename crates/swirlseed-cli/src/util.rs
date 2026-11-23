@@ -5,14 +5,21 @@ pub const MIN_SIDE: u32 = 16;
 pub const MAX_SIDE: u32 = 8192;
 
 /// Parses `"1024"` (square) or `"1920x1080"` (also `X` and `×` as the separator).
+#[cfg(test)]
 pub fn parse_size(s: &str) -> Result<(u32, u32), String> {
+    let (w, h) = parse_size_spec(s)?;
+    Ok((w, h.unwrap_or(w)))
+}
+
+/// Like [`parse_size`], but keeps whether the height was given: `"1024"` gives `(1024, None)`.
+pub fn parse_size_spec(s: &str) -> Result<(u32, Option<u32>), String> {
     let s = s.trim();
     let (w, h) = match s.find(['x', 'X', '×']) {
         Some(i) => {
             let sep_len = s[i..].chars().next().map_or(1, char::len_utf8);
-            (&s[..i], &s[i + sep_len..])
+            (&s[..i], Some(&s[i + sep_len..]))
         }
-        None => (s, s),
+        None => (s, None),
     };
     let side = |part: &str| -> Result<u32, String> {
         let v: u32 = part
@@ -26,7 +33,7 @@ pub fn parse_size(s: &str) -> Result<(u32, u32), String> {
         }
         Ok(v)
     };
-    Ok((side(w)?, side(h)?))
+    Ok((side(w)?, h.map(side).transpose()?))
 }
 
 /// A filesystem-friendly file stem for a seed: letters and digits are kept, runs of anything else
@@ -79,6 +86,8 @@ mod tests {
         assert!(parse_size("abc").is_err());
         assert!(parse_size("1024x").is_err());
         assert!(parse_size("").is_err());
+        assert_eq!(parse_size_spec("1024"), Ok((1024, None)));
+        assert_eq!(parse_size_spec("1920x1080"), Ok((1920, Some(1080))));
     }
 
     #[test]

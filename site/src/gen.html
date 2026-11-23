@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<!--
+  swirlseed — seeded generative images: https://github.com/alexeev-dauwalter/swirlseed
+  Author: Peter Alexeev Dauwalter <alexeev.dauwalter@41t.org>
+  Year: 2026
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>%TITLE% — swirlseed</title>
+<meta name="description" content="%DESC%">
+<meta property="og:title" content="%TITLE% — swirlseed">
+<meta property="og:description" content="%DESC%">
+<meta name="theme-color" content="#eeeef0">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/style.css">
+<link rel="modulepreload" href="/swirlseed/index.js">
+</head>
+<body data-gen="%ID%">
+<header>
+  <div><a class="backlink" href="/">← All generators</a><h1>%TITLE%</h1><p>%DESC%</p></div>
+  <nav><a href="/#generators">Generators</a><a href="/#examples">Examples</a><a href="/#install">Install</a><a href="https://github.com/alexeev-dauwalter/swirlseed" rel="noopener">GitHub</a></nav>
+</header>
+
+<main>
+<section id="generator">
+<div class="gen">
+  <div class="gen-view">
+    <div class="frame"><canvas id="gcanvas"></canvas></div>
+    <div class="gmeta"><span id="ginfo">rendering…</span></div>
+    <div class="gactions"><button class="btn dark" id="gdl">Download PNG</button><button class="btn" id="gdice">Random seed</button><button class="btn" id="gplay" hidden>Play</button></div>
+  </div>
+  <div class="panel" id="gpanel">
+    <div class="field"><label for="gseed">Seed</label><input id="gseed" spellcheck="false" autocomplete="off"></div>
+    <div class="field"><label>Frame</label><div class="seg" id="gsize"></div></div>
+    <div id="gparams"></div>
+    <div class="pfoot"><button class="btn small" id="greset" type="button">Reset parameters</button></div>
+  </div>
+</div>
+<div id="strips"></div>
+<div class="code">
+  <div class="codehead"><div class="tabs" id="gtabs"><button type="button" data-lang="cli" class="on">CLI</button><button type="button" data-lang="ts">TypeScript</button><button type="button" data-lang="rust">Rust</button></div><button class="btn small" id="gcopy">Copy</button></div>
+  <pre id="gcode"></pre>
+</div>
+</section>
+<nav class="others" id="others"></nav>
+</main>
+
+<footer><span>© 2026 Peter Alexeev Dauwalter</span><span><a href="https://github.com/alexeev-dauwalter/swirlseed" rel="noopener">Source on GitHub</a> · MIT</span></footer>
+
+<script type="module" src="/app/gen-page.js"></script>
+<script type="module" src="/app/others.js"></script>
+</body>
+</html>
