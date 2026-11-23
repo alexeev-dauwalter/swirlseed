@@ -2,7 +2,7 @@
 // and code snippets. © 2026 Peter Alexeev Dauwalter
 import { getGenerator } from "/swirlseed/index.js";
 import { Pool, dims, paint, randomSeed, rememberSeed, sharedSeed } from "/app/pool.js";
-import { hl } from "/app/code.js";
+import { cliWithSeed, hl } from "/app/code.js";
 
 const g = getGenerator(document.body.dataset.gen);
 const $ = (s) => document.querySelector(s);
@@ -138,6 +138,7 @@ function sync() {
 // ---------- view ----------
 let ver = 0;
 let playing = false;
+const playBtn = $("#gplay");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const frameDims = (long) => dims(FRAMES[state.frame][1], long);
 const job = (w, h, params) => ({ gen: g.id, seed: state.seed, w, h, params: params || { ...state.p } });
@@ -151,7 +152,6 @@ async function renderView() {
   if (!lo || my !== ver) return;
   paint(canvas, lo);
   info(lo);
-  if (playing) return;
   await sleep(320);
   if (my !== ver) return;
   const hi = await view.run(job(...frameDims(HIGH)), "view");
@@ -179,7 +179,6 @@ for (const pv of g.previews || []) {
     b.innerHTML = "<canvas></canvas><span></span>";
     b.querySelector("span").textContent = pv.labels[i];
     b.onclick = () => {
-      stopPlay();
       state.p[pv.key] = v;
       sync();
       update();
@@ -210,17 +209,16 @@ function renderStrips() {
 }
 
 // ---------- code ----------
-const qsh = (s) => "'" + s.replace(/'/g, "'\\''") + "'";
 const f1 = (v) => {
   const t = num(v);
   return t.includes(".") || t.includes("e") ? t : t + ".0";
 };
 function cli() {
   const [w, h] = frameDims(DOWNLOAD);
-  let c = "swirlseed -g " + g.id + " " + qsh(state.seed) + " -s " + w + "x" + h;
+  let c = "swirlseed -g " + g.id + " -s " + w + "x" + h;
   const ch = changed();
   if (ch.length) c += " \\\n  " + ch.map((p) => "-p " + p.key + "=" + (p.kind === "number" ? num(state.p[p.key]) : state.p[p.key])).join(" ");
-  return c + " -o " + g.id + ".png";
+  return cliWithSeed(c + " -o " + g.id + ".png", state.seed);
 }
 function ts() {
   const [w, h] = frameDims(DOWNLOAD);
@@ -278,6 +276,10 @@ function writeUrl() {
   history.replaceState(null, "", u);
 }
 function update(now) {
+  if (playing) {
+    playing = false;
+    playBtn.textContent = "Play";
+  }
   writeUrl();
   renderCode();
   stripMarks();
@@ -299,7 +301,6 @@ $("#gdice").onclick = () => {
   update(true);
 };
 $("#greset").onclick = () => {
-  stopPlay();
   state.p = { ...defaults };
   sync();
   update(true);
@@ -327,36 +328,30 @@ $("#gdl").onclick = async function () {
 
 // sky: let the day run
 const timeParam = g.params.find((p) => p.key === "time" && p.unit === "h");
-const playBtn = $("#gplay");
-function stopPlay() {
-  if (!playing) return;
-  playing = false;
-  playBtn.textContent = "Play";
-  renderView();
-  renderStrips();
-}
 if (timeParam) {
   playBtn.hidden = false;
   playBtn.onclick = async () => {
-    if (playing) return stopPlay();
+    if (playing) return update(true);
     playing = true;
     playBtn.textContent = "Pause";
+    const playback = ++ver;
+    view.cancel("view");
     const tEl = host.querySelector('[data-k="time"]');
-    while (playing) {
+    while (playback === ver) {
       state.p.time = +((state.p.time + 0.1) % 24).toFixed(2);
       tEl.querySelector("input").value = state.p.time;
       tEl.querySelector("output").textContent = show(timeParam, state.p.time);
-      const my = ++ver;
       const r = await view.run(job(...frameDims(LOW)), "view");
-      if (!playing || my !== ver) break;
+      if (playback !== ver) return;
+      if (!r) return update(true);
       paint(canvas, r);
       info(r);
       await new Promise((res) => requestAnimationFrame(res));
     }
-    writeUrl();
-    renderCode();
   };
-  host.querySelector('[data-k="time"] input').addEventListener("pointerdown", stopPlay);
+  host.querySelector('[data-k="time"] input').addEventListener("pointerdown", () => {
+    if (playing) update(true);
+  });
 }
 
 sync();

@@ -1,5 +1,12 @@
-// Tiny syntax highlighter for the CLI / TypeScript / Rust snippets. © 2026 Peter Alexeev Dauwalter
+// Shell quoting and syntax highlighting for code snippets. © 2026 Peter Alexeev Dauwalter
 const esc = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+export function cliWithSeed(command, seed) {
+  // The CLI reads from stdin when the seed argument is a single dash.
+  if (seed === "-") return "printf '%s' '-' | " + command + " -";
+  return command + " -- '" + seed.replace(/'/g, "'\\''") + "'";
+}
+
 const LANG = {
   cli: { re: /(#[^\n]*)|('(?:[^']|'\\'')*'|"(?:[^"\\]|\\.)*")|(--?[A-Za-z][\w-]*)|(\b\d+(?:\.\d+)?(?:x\d+)?\b)|(^swirlseed\b)/gm, cls: ["c", "s", "k", "n", "f"] },
   ts: { re: /(\/\/[^\n]*)|("(?:[^"\\]|\\.)*")|\b(import|from|const|let|true|false|new)\b|(\b\d+(?:\.\d+)?\b)|\b(drawGenerator|renderGenerator)\b(?=\s*\()|(\b[A-Za-z_]\w*(?=\s*:))/g, cls: ["c", "s", "k", "n", "f", "t"] },

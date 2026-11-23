@@ -190,13 +190,10 @@ fn render(seed: &str, w: usize, h: usize, p: &Params) -> Vec<u8> {
             c1 /= sw;
             c2 /= sw;
             for l in &ls {
-                let sd;
-                let along;
-                if l.arc {
+                let (sd, along) = if l.arc {
                     let dx = u - l.cx;
                     let dy = v - l.cy;
-                    sd = (l.r - hypot2(dx, dy)) * l.side;
-                    along = atan2(dy, dx) * l.r;
+                    ((l.r - hypot2(dx, dy)) * l.side, atan2(dy, dx) * l.r)
                 } else {
                     let ct = cos(l.th);
                     let st = sin(l.th);
@@ -204,9 +201,8 @@ fn render(seed: &str, w: usize, h: usize, p: &Params) -> Vec<u8> {
                     let vv = -u * st + v * ct;
                     let y0 = l.c + l.a * sin(uu * l.f + l.ph) + l.a2 * sin(uu * l.f2 + l.ph2);
                     let sl = l.a * l.f * cos(uu * l.f + l.ph) + l.a2 * l.f2 * cos(uu * l.f2 + l.ph2);
-                    sd = ((vv - y0) / (1.0 + sl * sl).sqrt()) * l.side;
-                    along = uu;
-                }
+                    (((vv - y0) / (1.0 + sl * sl).sqrt()) * l.side, uu)
+                };
                 let sv = vnoise(along * 1.6 + l.off, 0.5, s_ + 7.0);
                 let s = 0.004 + (0.03 + 0.38 * soft) * pow(sv, 1.2) + 0.03 * soft;
                 let a = sstep(-s, s, sd);

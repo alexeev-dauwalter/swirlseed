@@ -56,6 +56,7 @@ import { createPattern, paletteHex, drawToCanvas } from "/swirlseed/index.js";
 Object.assign(window, { createPattern, paletteHex, drawToCanvas });
 </script>
 <script type="module">
+import { cliWithSeed } from "/app/code.js";
 (function(){
   var $=function(s){return document.querySelector(s)};
   var canvas=$("#gcanvas");
@@ -134,15 +135,14 @@ Object.assign(window, { createPattern, paletteHex, drawToCanvas });
       (f.sel||[]).forEach(function(n){p[n[0]]=st[n[0]]});(f.chk||[]).forEach(function(n){p[n[0]]=st[n[0]]});o[f.key]=p});
     return o;
   }
-  function q(s){return "'"+s.replace(/'/g,"'\\''")+"'"}
   function cli(){
-    var z=SIZES[state.size],c="swirlseed "+q(state.seed)+" -s "+z[1]+"x"+z[2];
+    var z=SIZES[state.size],c="swirlseed -s "+z[1]+"x"+z[2];
     if(!state.shineAuto)c+=" --shine "+fmt(state.shine);
     FX.forEach(function(f){var st=state.fx[f.key];if(!st.on)return;c+=" \\\n  --"+f.key;
       (f.num||[]).forEach(function(n){c+=" --"+f.key+"-"+n[0]+" "+fmt(st[n[0]])});
       (f.sel||[]).forEach(function(n){c+=" --"+f.key+"-"+n[0]+" "+st[n[0]]});
       (f.chk||[]).forEach(function(n){if(st[n[0]])c+=" --"+f.key+"-"+n[0]});});
-    return c+" -o out.png";
+    return cliWithSeed(c+" -o out.png",state.seed);
   }
   function ts(){
     var z=SIZES[state.size],o=options(),lines=[];
