@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<!--
+  swirlseed — seeded generative images: https://github.com/alexeev-dauwalter/swirlseed
+  Author: Peter Alexeev Dauwalter <alexeev.dauwalter@41t.org>
+  Year: 2026
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Swirl — swirlseed</title>
+<meta name="description" content="The original swirlseed pattern: fluid, glassy marbling from a string, with reeded glass, halftone, dither and grain.">
+<meta property="og:title" content="Swirl — swirlseed">
+<meta property="og:description" content="The original swirlseed pattern: fluid, glassy marbling from a string, with reeded glass, halftone, dither and grain.">
+<meta name="theme-color" content="#eeeef0">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/style.css">
+<link rel="modulepreload" href="/swirlseed/index.js">
+</head>
+<body data-gen="swirl">
+<header>
+  <div><a class="backlink" href="/">← All generators</a><h1>Swirl</h1><p>The original pattern: fluid, glassy marbling with every knob exposed. Change anything and the image redraws instantly.</p></div>
+  <nav><a href="/#generators">Generators</a><a href="/#examples">Examples</a><a href="/#install">Install</a><a href="https://github.com/alexeev-dauwalter/swirlseed" rel="noopener">GitHub</a></nav>
+</header>
+
+<main>
+<section id="generator">
+
+<div class="gen">
+  <div class="gen-view">
+    <div class="frame"><canvas id="gcanvas"></canvas></div>
+    <div class="gmeta"><div class="swatches" id="gsw"></div><span id="ginfo"></span></div>
+    <div class="gactions"><button class="btn dark" id="gdl">Download PNG</button><button class="btn" id="gdice">Random seed</button></div>
+  </div>
+  <div class="panel" id="gpanel">
+    <div class="field"><label for="gseed">Seed</label><input id="gseed" value="Hello, world!" spellcheck="false" autocomplete="off"></div>
+    <div class="field"><label>Size</label><div class="seg" id="gsize"></div></div>
+    <div class="field"><label>Presets</label><div class="seg wrap" id="gpresets"></div></div>
+    <div class="row"><span>Shine</span><input type="range" id="gshine" min="0" max="1.5" step="0.05"><output id="gshineo"></output></div>
+    <label class="check"><input type="checkbox" id="gshineauto" checked> Auto (derived from the seed)</label>
+    <div id="gfx"></div>
+  </div>
+</div>
+<div class="code">
+  <div class="codehead"><div class="tabs" id="gtabs"><button type="button" data-lang="cli" class="on">CLI</button><button type="button" data-lang="ts">TypeScript</button><button type="button" data-lang="rust">Rust</button></div><button class="btn small" id="gcopy">Copy</button></div>
+  <pre id="gcode"></pre>
+</div>
+</section>
+<nav class="others" id="others"></nav>
+</main>
+
+<footer><span>© 2026 Peter Alexeev Dauwalter</span><span><a href="https://github.com/alexeev-dauwalter/swirlseed" rel="noopener">Source on GitHub</a> · MIT</span></footer>
+
+<script type="module">
+import { createPattern, paletteHex, drawToCanvas } from "/swirlseed/index.js";
+Object.assign(window, { createPattern, paletteHex, drawToCanvas });
+</script>
+<script type="module">
+(function(){
+  var $=function(s){return document.querySelector(s)};
+  var canvas=$("#gcanvas");
+  var SIZES=[["1:1",640,640],["3:2",720,480],["2:3",480,720],["16:9",768,432]];
+  var FX=[
+    {key:"ribs",title:"Reeded glass",num:[["count","Flutes",4,64,1,24],["strength","Strength",0,1.5,.05,.6],["angle","Angle °",0,180,1,0,1],["shade","Shade",0,1,.05,.5]]},
+    {key:"halftone",title:"Halftone",num:[["size","Cell size",3,30,.5,10],["angle","Angle °",0,180,1,30,1],["mix","Mix",0,1,.05,1]],
+      sel:[["shape","Shape",["dot","square","line"],"dot"],["mode","Ink",["color","mono"],"color"]],chk:[["invert","Invert"]]},
+    {key:"dither",title:"Bayer dither",num:[["levels","Levels",2,16,1,4],["scale","Cell size",.5,6,.25,1.5],["amount","Amount",0,1,.05,1]]},
+    {key:"grain",title:"Film grain",num:[["amount","Amount",0,1,.05,.35],["size","Size",.5,4,.25,1]]}
+  ];
+  var state={seed:(new URLSearchParams(location.search).get("seed")||(function(){try{return sessionStorage.getItem("swirlseed.seed")}catch(e){return null}})()||"Hello, world!"),size:0,shineAuto:true,shine:.8,fx:{}};
+  FX.forEach(function(f){var o={on:false};(f.num||[]).forEach(function(n){o[n[0]]=n[5]});(f.sel||[]).forEach(function(n){o[n[0]]=n[3]});(f.chk||[]).forEach(function(n){o[n[0]]=false});state.fx[f.key]=o});
+
+  // ---- build controls
+  var fxHost=$("#gfx");
+  FX.forEach(function(f){
+    var h='<div class="fx" data-fx="'+f.key+'"><div class="fxhead"><span class="fxtitle">'+f.title+'</span><label class="switch"><input type="checkbox" data-k="on"><i></i></label></div><div class="fxbody">';
+    (f.num||[]).forEach(function(n){h+='<div class="row"><span>'+n[1]+'</span><input type="range" data-k="'+n[0]+'" min="'+n[2]+'" max="'+n[3]+'" step="'+n[4]+'"><output></output></div>'});
+    (f.sel||[]).forEach(function(n){h+='<div class="row"><span>'+n[1]+'</span><select data-k="'+n[0]+'">'+n[2].map(function(o){return "<option>"+o+"</option>"}).join("")+'</select></div>'});
+    (f.chk||[]).forEach(function(n){h+='<label class="check"><input type="checkbox" data-k="'+n[0]+'"> '+n[1]+'</label>'});
+    fxHost.insertAdjacentHTML("beforeend",h+"</div></div>");
+  });
+  var sizeHost=$("#gsize");
+  SIZES.forEach(function(z,i){var b=document.createElement("button");b.type="button";b.textContent=z[0];b.onclick=function(){state.size=i;sync();schedule()};sizeHost.appendChild(b)});
+
+  var PRESETS={
+    "Clean":function(){},
+    "Reeded":function(){on("ribs",{count:30,strength:.7,angle:0,shade:.5})},
+    "Halftone":function(){on("halftone",{size:9,angle:30,shape:"dot",mode:"color",invert:false,mix:1})},
+    "Newsprint":function(){on("halftone",{size:7,angle:45,shape:"dot",mode:"mono",invert:false,mix:1});on("grain",{amount:.35,size:1})},
+    "Glow dots":function(){on("halftone",{size:10,angle:30,shape:"dot",mode:"color",invert:true,mix:1})},
+    "Retro dither":function(){on("dither",{levels:3,scale:2.5,amount:1})},
+    "Film":function(){on("grain",{amount:.5,size:1.5});on("ribs",{count:18,strength:.35,angle:90,shade:.3})}
+  };
+  function on(k,v){state.fx[k].on=true;for(var x in v)state.fx[k][x]=v[x]}
+  var pHost=$("#gpresets");
+  Object.keys(PRESETS).forEach(function(name){var b=document.createElement("button");b.type="button";b.textContent=name;b.onclick=function(){
+    FX.forEach(function(f){state.fx[f.key].on=false});PRESETS[name]();sync();schedule()};pHost.appendChild(b)});
+
+  // ---- state <-> DOM
+  function fmt(v){return String(+(+v).toFixed(3))}
+  function sync(){
+    $("#gseed").value=state.seed;
+    [].forEach.call(sizeHost.children,function(b,i){b.classList.toggle("on",i===state.size)});
+    $("#gshineauto").checked=state.shineAuto;
+    var sh=state.shineAuto?createPattern(state.seed).shine:state.shine;
+    $("#gshine").value=sh;$("#gshine").disabled=state.shineAuto;$("#gshineo").textContent=fmt(sh);
+    FX.forEach(function(f){
+      var el=fxHost.querySelector('[data-fx="'+f.key+'"]'),st=state.fx[f.key];
+      el.classList.toggle("on",st.on);
+      [].forEach.call(el.querySelectorAll("[data-k]"),function(inp){
+        var k=inp.getAttribute("data-k");
+        if(k==="on")inp.checked=st.on;else if(inp.type==="checkbox")inp.checked=!!st[k];else inp.value=st[k];
+        if(inp.type==="range")inp.parentElement.querySelector("output").textContent=fmt(st[k]);
+      });
+    });
+  }
+  $("#gseed").addEventListener("input",function(e){state.seed=e.target.value;if(state.shineAuto)$("#gshine").value=createPattern(state.seed).shine,$("#gshineo").textContent=fmt($("#gshine").value);schedule()});
+  $("#gshine").addEventListener("input",function(e){state.shine=+e.target.value;$("#gshineo").textContent=fmt(state.shine);schedule()});
+  $("#gshineauto").addEventListener("change",function(e){state.shineAuto=e.target.checked;if(!state.shineAuto)state.shine=+$("#gshine").value;sync();schedule()});
+  fxHost.addEventListener("input",function(e){
+    var inp=e.target,k=inp.getAttribute("data-k");if(!k)return;
+    var key=inp.closest(".fx").getAttribute("data-fx"),st=state.fx[key];
+    if(inp.type==="checkbox")st[k]=inp.checked;else if(inp.type==="range"){st[k]=+inp.value;inp.parentElement.querySelector("output").textContent=fmt(inp.value)}else st[k]=inp.value;
+    if(k==="on")inp.closest(".fx").classList.toggle("on",inp.checked);
+    schedule();
+  });
+
+  // ---- options, snippets
+  var DEG=Math.PI/180;
+  function options(){
+    var o={};if(!state.shineAuto)o.shine=state.shine;
+    FX.forEach(function(f){var st=state.fx[f.key];if(!st.on)return;var p={};
+      (f.num||[]).forEach(function(n){p[n[0]]=n[6]?st[n[0]]*DEG:st[n[0]]});
+      (f.sel||[]).forEach(function(n){p[n[0]]=st[n[0]]});(f.chk||[]).forEach(function(n){p[n[0]]=st[n[0]]});o[f.key]=p});
+    return o;
+  }
+  function q(s){return "'"+s.replace(/'/g,"'\\''")+"'"}
+  function cli(){
+    var z=SIZES[state.size],c="swirlseed "+q(state.seed)+" -s "+z[1]+"x"+z[2];
+    if(!state.shineAuto)c+=" --shine "+fmt(state.shine);
+    FX.forEach(function(f){var st=state.fx[f.key];if(!st.on)return;c+=" \\\n  --"+f.key;
+      (f.num||[]).forEach(function(n){c+=" --"+f.key+"-"+n[0]+" "+fmt(st[n[0]])});
+      (f.sel||[]).forEach(function(n){c+=" --"+f.key+"-"+n[0]+" "+st[n[0]]});
+      (f.chk||[]).forEach(function(n){if(st[n[0]])c+=" --"+f.key+"-"+n[0]});});
+    return c+" -o out.png";
+  }
+  function ts(){
+    var z=SIZES[state.size],o=options(),lines=[];
+    if("shine" in o)lines.push("  shine: "+fmt(o.shine)+",");
+    FX.forEach(function(f){if(!o[f.key])return;var parts=[];
+      (f.num||[]).forEach(function(n){parts.push(n[0]+": "+fmt(o[f.key][n[0]]))});
+      (f.sel||[]).forEach(function(n){parts.push(n[0]+': "'+o[f.key][n[0]]+'"')});
+      (f.chk||[]).forEach(function(n){if(o[f.key][n[0]])parts.push(n[0]+": true")});
+      lines.push("  "+f.key+": { "+parts.join(", ")+" },")});
+    var opt=lines.length?"{\n"+lines.join("\n")+"\n}":"{}";
+    return 'import { drawToCanvas } from "swirlseed";\n\ncanvas.width = '+z[1]+";\ncanvas.height = "+z[2]+";\ndrawToCanvas(canvas, "+JSON.stringify(state.seed)+", "+opt+");";
+  }
+
+
+  function f1(v){var t=fmt(v);return t.indexOf(".")<0?t+".0":t}
+  function rs(){
+    var z=SIZES[state.size],uses=["generate","RenderOptions"],body=[];
+    if(!state.shineAuto)body.push("    shine: Some("+f1(state.shine)+"),");
+    var TY={ribs:"RibsOptions",halftone:"HalftoneOptions",dither:"DitherOptions",grain:"GrainOptions"};
+    FX.forEach(function(f){var st=state.fx[f.key];if(!st.on)return;uses.push(TY[f.key]);var p=[];
+      (f.num||[]).forEach(function(n){var v=st[n[0]];p.push("        "+n[0]+": Some("+(n[6]?f1(v)+"_f64.to_radians()":f1(v))+"),")});
+      (f.sel||[]).forEach(function(n){var T=n[0]==="shape"?"HalftoneShape":"HalftoneMode";uses.push(T);var V=st[n[0]];p.push("        "+n[0]+": Some("+T+"::"+V.charAt(0).toUpperCase()+V.slice(1)+"),")});
+      (f.chk||[]).forEach(function(n){if(st[n[0]])p.push("        "+n[0]+": Some(true),")});
+      body.push("    "+f.key+": Some("+TY[f.key]+" {\n"+p.join("\n")+"\n        ..Default::default()\n    }),");});
+    uses=uses.filter(function(u,i){return uses.indexOf(u)===i}).sort(function(a,b){var la=a[0]===a[0].toLowerCase(),lb=b[0]===b[0].toLowerCase();return la!==lb?(la?-1:1):(a<b?-1:1)});
+    var opts=body.length?"RenderOptions {\n"+body.join("\n")+"\n    ..Default::default()\n}":"RenderOptions::default()";
+    return "use swirlseed::{"+uses.join(", ")+"};\n\nlet opts = "+opts+";\nlet rgba: Vec<u8> = generate("+JSON.stringify(state.seed)+", "+z[1]+", "+z[2]+", &opts);\nassert_eq!(rgba.len(), "+z[1]+" * "+z[2]+" * 4);";
+  }
+  var esc=function(t){return t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")};
+  var LANG={
+    cli:{re:/(#[^\n]*)|('(?:[^']|'\\'')*'|"(?:[^"\\]|\\.)*")|(--?[A-Za-z][\w-]*)|(\b\d+(?:\.\d+)?(?:x\d+)?\b)|(^swirlseed\b)/gm,cls:["c","s","k","n","f"]},
+    ts:{re:/(\/\/[^\n]*)|("(?:[^"\\]|\\.)*")|\b(import|from|const|let|true|false|new)\b|(\b\d+(?:\.\d+)?\b)|\b(drawToCanvas)\b(?=\s*\()|(\b[A-Za-z_]\w*(?=\s*:))/g,cls:["c","s","k","n","f","t"]},
+    rust:{re:/(\/\/[^\n]*)|("(?:[^"\\]|\\.)*")|\b(use|let|mut|assert_eq|true|false|Some|None)\b|(\b\d+(?:\.\d+)?(?:_f64)?\b)|\b([A-Z]\w*)\b|(\b[a-z_]\w*(?=\s*\())|(\b[a-z_]\w*(?=:[^:]))|(&amp;|\.\.)/g,cls:["c","s","k","n","t","f","p","o"]}
+  };
+  function hl(text,lang){
+    var L=LANG[lang],out="",last=0,m;L.re.lastIndex=0;
+    while((m=L.re.exec(text))){
+      if(m[0]==="")L.re.lastIndex++;
+      var idx=-1;for(var i=1;i<m.length;i++)if(m[i]!==undefined){idx=i-1;break}
+      out+=esc(text.slice(last,m.index))+'<span class="tk-'+L.cls[idx]+'">'+esc(m[0])+"</span>";last=m.index+m[0].length;
+    }
+    return out+esc(text.slice(last));
+  }
+  var lang="cli",codeText="";
+  function renderCode(){codeText=lang==="cli"?cli():lang==="ts"?ts():rs();$("#gcode").innerHTML=hl(codeText,lang)}
+  [].forEach.call(document.querySelectorAll("#gtabs button"),function(b){b.onclick=function(){
+    lang=b.getAttribute("data-lang");[].forEach.call(document.querySelectorAll("#gtabs button"),function(x){x.classList.toggle("on",x===b)});renderCode()}});
+  $("#gcopy").onclick=function(){var b=this;try{navigator.clipboard.writeText(codeText)}catch(e){}b.textContent="Copied";setTimeout(function(){b.textContent="Copy"},1200)};
+
+  // ---- render
+  var pending=0;
+  function schedule(){cancelAnimationFrame(pending);pending=requestAnimationFrame(function(){setTimeout(render,0)})}
+  function render(){
+    var z=SIZES[state.size];canvas.width=z[1];canvas.height=z[2];
+    var t=performance.now();drawToCanvas(canvas,state.seed,options());var ms=Math.round(performance.now()-t);
+    var p=createPattern(state.seed);
+    $("#gsw").innerHTML=paletteHex(p).map(function(c){return '<i title="'+c+'" style="background:'+c+'"></i>'}).join("");
+    $("#ginfo").textContent=p.mood+" · "+p.mode+" · "+z[1]+"×"+z[2]+" · "+ms+" ms";
+    renderCode();
+  }
+  $("#gdl").onclick=function(){canvas.toBlob(function(b){var a=document.createElement("a");a.href=URL.createObjectURL(b);
+    a.download=(state.seed.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"swirlseed")+".png";a.click();setTimeout(function(){URL.revokeObjectURL(a.href)},1000)})};
+  var W1=["amber","glass","tidal","velvet","neon","ember","lunar","coral","moss","indigo","opal","dusk"],W2=["river","bloom","drift","harbor","echo","canyon","aurora","orbit","silk","storm","garden","signal"];
+  $("#gdice").onclick=function(){state.seed=W1[Math.random()*W1.length|0]+" "+W2[Math.random()*W2.length|0]+" "+(Math.random()*90+10|0);sync();schedule()};
+  sync();render();
+})();
+</script>
+<script type="module" src="/app/others.js"></script>
+</body>
+</html>
