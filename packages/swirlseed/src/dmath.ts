@@ -104,3 +104,49 @@ export function pow(x: number, y: number): number {
 export function roundHalfUp(x: number): number {
   return Math.floor(x + 0.5);
 }
+
+const ATAN_C: number[] = Array.from({ length: 14 }, (_, k) => (k % 2 === 1 ? -1 : 1) / (2 * k + 1));
+
+/** Arctangent, built from the series after two half-angle reductions (|x| ≤ tan(π/16)). */
+export function atan(x: number): number {
+  let s = 1;
+  if (x < 0) {
+    x = -x;
+    s = -1;
+  }
+  let off = 0;
+  if (x > 1) {
+    x = 1 / x;
+    off = 1;
+  }
+  x = x / (1 + Math.sqrt(1 + x * x));
+  x = x / (1 + Math.sqrt(1 + x * x));
+  let r = 4 * x * horner(ATAN_C, x * x);
+  if (off === 1) r = HALF_PI - r;
+  return s * r;
+}
+
+/** atan2(y, x) in (-π, π]. */
+export function atan2(y: number, x: number): number {
+  if (x > 0) return atan(y / x);
+  if (x < 0) return y >= 0 ? atan(y / x) + PI : atan(y / x) - PI;
+  if (y > 0) return HALF_PI;
+  if (y < 0) return -HALF_PI;
+  return 0;
+}
+
+export function asin(x: number): number {
+  x = x < -1 ? -1 : x > 1 ? 1 : x;
+  return atan2(x, Math.sqrt(1 - x * x));
+}
+
+export function acos(x: number): number {
+  x = x < -1 ? -1 : x > 1 ? 1 : x;
+  return atan2(Math.sqrt(1 - x * x), x);
+}
+
+/** Real cube root (sign kept). */
+export function cbrt(x: number): number {
+  if (x === 0) return 0;
+  return x < 0 ? -pow(-x, 1 / 3) : pow(x, 1 / 3);
+}

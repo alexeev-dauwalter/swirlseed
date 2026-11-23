@@ -27,6 +27,7 @@
 
 pub mod color;
 pub mod dmath;
+pub mod gen;
 mod halftone;
 mod noise;
 pub mod options;
@@ -34,6 +35,7 @@ pub mod params;
 pub mod render;
 pub mod rng;
 
+pub use gen::{get_generator, render_generator, Generator, Params as GenParams, Value as GenValue, GENERATORS};
 pub use options::{
     DitherOptions, GrainOptions, HalftoneMode, HalftoneOptions, HalftoneShape, RenderOptions, RibsOptions,
 };

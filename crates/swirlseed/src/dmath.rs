@@ -144,3 +144,86 @@ pub fn pow(x: f64, y: f64) -> f64 {
 pub fn round_half_up(x: f64) -> f64 {
     (x + 0.5).floor()
 }
+
+fn atan_c() -> &'static [f64; 14] {
+    static C: OnceLock<[f64; 14]> = OnceLock::new();
+    C.get_or_init(|| {
+        let mut c = [0.0f64; 14];
+        for k in 0..14usize {
+            c[k] = (if k % 2 == 1 { -1.0 } else { 1.0 }) / (2 * k + 1) as f64;
+        }
+        c
+    })
+}
+
+/// Arctangent, built from the series after two half-angle reductions (|x| <= tan(pi/16)).
+pub fn atan(mut x: f64) -> f64 {
+    let mut s = 1.0;
+    if x < 0.0 {
+        x = -x;
+        s = -1.0;
+    }
+    let mut off = false;
+    if x > 1.0 {
+        x = 1.0 / x;
+        off = true;
+    }
+    x = x / (1.0 + (1.0 + x * x).sqrt());
+    x = x / (1.0 + (1.0 + x * x).sqrt());
+    let mut r = 4.0 * x * horner(atan_c(), x * x);
+    if off {
+        r = HALF_PI - r;
+    }
+    s * r
+}
+
+/// atan2(y, x) in (-pi, pi].
+pub fn atan2(y: f64, x: f64) -> f64 {
+    if x > 0.0 {
+        return atan(y / x);
+    }
+    if x < 0.0 {
+        return if y >= 0.0 { atan(y / x) + PI } else { atan(y / x) - PI };
+    }
+    if y > 0.0 {
+        return HALF_PI;
+    }
+    if y < 0.0 {
+        return -HALF_PI;
+    }
+    0.0
+}
+
+pub fn asin(x: f64) -> f64 {
+    let x = if x < -1.0 {
+        -1.0
+    } else if x > 1.0 {
+        1.0
+    } else {
+        x
+    };
+    atan2(x, (1.0 - x * x).sqrt())
+}
+
+pub fn acos(x: f64) -> f64 {
+    let x = if x < -1.0 {
+        -1.0
+    } else if x > 1.0 {
+        1.0
+    } else {
+        x
+    };
+    atan2((1.0 - x * x).sqrt(), x)
+}
+
+/// Real cube root (sign kept).
+pub fn cbrt(x: f64) -> f64 {
+    if x == 0.0 {
+        return 0.0;
+    }
+    if x < 0.0 {
+        -pow(-x, 1.0 / 3.0)
+    } else {
+        pow(x, 1.0 / 3.0)
+    }
+}

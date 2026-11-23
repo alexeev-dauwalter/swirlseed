@@ -1,5 +1,8 @@
-//! `swirlseed` — generate a fluid, glassy marbling pattern from a string and save it as a PNG.
+//! `swirlseed` — generate a fluid, glassy marbling pattern (or any of the other seeded generators:
+//! sky, ebru, suminagashi, mesh gradient, flow field, watercolour, aurora, planets, metaballs, …) from a
+//! string and save it as a PNG.
 
+mod gen_cli;
 mod util;
 
 use std::error::Error;
@@ -9,6 +12,7 @@ use std::process::ExitCode;
 
 use clap::error::ErrorKind;
 use clap::{CommandFactory, Parser, ValueEnum};
+use swirlseed::gen::{get_generator, render_generator, resolve_params, Value};
 use swirlseed::{
     create_pattern, palette_hex, render_pattern, DitherOptions, GrainOptions, HalftoneMode, HalftoneOptions,
     HalftoneShape, RenderOptions, RibsOptions,
@@ -31,22 +35,39 @@ enum InkArg {
     Mono,
 }
 
-/// Generate a fluid, glassy marbling pattern from a string. The same seed always gives the same
-/// image (byte for byte, and identical to the `swirlseed` npm package); change one character and you
-/// get a different one.
+/// Generate an image from a string: the fluid, glassy marbling pattern by default, or a sky, ebru,
+/// suminagashi, mesh gradient, flow field, watercolour, aurora, planet, metaballs and more with -g.
+/// The same seed always gives the same image (byte for byte, and identical to the `swirlseed` npm
+/// package); change one character and you get a different one.
 #[derive(Parser, Debug)]
 #[command(name = "swirlseed", version, max_term_width = 100)]
+#[command(after_help = "Examples:\n  swirlseed \"Hello, world!\"\n  swirlseed --list\n  \
+swirlseed -g sky -p time=18.4 -p type=cumulus -s 1920x1080 sunset\n  swirlseed -g metaballs -p look=glass seed")]
 struct Cli {
     /// Seed string; use "-" to read it from stdin
-    seed: String,
+    #[arg(required_unless_present = "list")]
+    seed: Option<String>,
 
-    /// Output PNG path; "-" writes to stdout [default: <seed>.png]
+    /// Output PNG path; "-" writes to stdout [default: <seed>.png, or <generator>-<seed>.png]
     #[arg(short, long, value_name = "FILE")]
     output: Option<String>,
 
-    /// Image size: "1024" or "1920x1080" (16..8192 px per side)
-    #[arg(short, long, value_name = "SIZE", default_value = "1024", value_parser = util::parse_size)]
-    size: (u32, u32),
+    /// Image size: "1024" or "1920x1080" (16..8192 px per side). With a generator a single number is
+    /// the width and the height follows the generator's aspect ratio
+    #[arg(short, long, value_name = "SIZE", default_value = "1024", value_parser = util::parse_size_spec)]
+    size: (u32, Option<u32>),
+
+    /// What to draw: "swirl" (the default) or a generator id such as sky, ebru, metaballs (see --list)
+    #[arg(short, long, value_name = "ID")]
+    generator: Option<String>,
+
+    /// A generator parameter, repeatable: -p time=18.5 -p type=cirrus (see --list)
+    #[arg(short = 'p', long = "param", value_name = "KEY=VALUE", value_parser = gen_cli::parse_param)]
+    params: Vec<(String, Value)>,
+
+    /// List the generators and their parameters (with -g, only that one) and exit
+    #[arg(long)]
+    list: bool,
 
     /// Light and gloss strength, 0..1.5 [default: derived from the seed; 0 = flat]
     #[arg(long, value_name = "F")]
@@ -217,17 +238,76 @@ fn write_png(out: impl Write, w: u32, h: u32, rgba: &[u8]) -> Result<(), Box<dyn
     Ok(())
 }
 
-fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
-    let seed = if cli.seed == "-" {
-        let mut buf = String::new();
-        io::stdin().read_to_string(&mut buf)?;
-        util::strip_trailing_newline(buf)
+/// True when any option of the swirl pattern was given.
+fn swirl_options_used(o: &RenderOptions) -> bool {
+    o.shine.is_some() || o.ribs.is_some() || o.halftone.is_some() || o.dither.is_some() || o.grain.is_some()
+}
+
+fn save(cli: &Cli, default_path: String, w: u32, h: u32, rgba: &[u8]) -> Result<(), Box<dyn Error>> {
+    if cli.output.as_deref() == Some("-") {
+        write_png(BufWriter::new(io::stdout().lock()), w, h, rgba)?;
     } else {
-        cli.seed.clone()
+        let path = cli.output.clone().unwrap_or(default_path);
+        write_png(BufWriter::new(File::create(&path)?), w, h, rgba)?;
+        eprintln!("wrote {path} ({w}x{h})");
+    }
+    Ok(())
+}
+
+fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
+    if cli.list {
+        print!("{}", gen_cli::list(cli.generator.as_deref())?);
+        return Ok(());
+    }
+    let seed = match cli.seed.as_deref() {
+        Some("-") => {
+            let mut buf = String::new();
+            io::stdin().read_to_string(&mut buf)?;
+            util::strip_trailing_newline(buf)
+        }
+        Some(s) => s.to_owned(),
+        None => return Err("a seed is required".into()),
     };
 
-    let (w, h) = cli.size;
+    let to_stdout = cli.output.as_deref() == Some("-");
+    if to_stdout && io::stdout().is_terminal() {
+        return Err("refusing to write a PNG to a terminal; redirect stdout or pass -o FILE".into());
+    }
+
     let options = build_options(&cli);
+    let gid = cli.generator.clone().unwrap_or_else(|| gen_cli::SWIRL.to_owned());
+    if !gid.eq_ignore_ascii_case(gen_cli::SWIRL) {
+        let g = get_generator(&gid)?;
+        if swirl_options_used(&options) {
+            return Err(format!(
+                "--shine, --ribs*, --halftone*, --dither* and --grain* only apply to the swirl pattern; \
+                 {} takes -p key=value (see swirlseed --list -g {})",
+                g.id, g.id
+            )
+            .into());
+        }
+        gen_cli::check_ranges(g, &cli.params)?;
+        let resolved = resolve_params(g, &cli.params)?;
+        let (w, h) = gen_cli::resolve_size(cli.size, Some(g.aspect));
+        if cli.info {
+            eprintln!("seed       {seed:?}");
+            eprintln!("generator  {} ({})", g.id, g.title);
+            eprintln!("size       {w}x{h}");
+            for (k, v) in &resolved.0 {
+                match v {
+                    Value::Num(n) => eprintln!("{k:<10} {n}"),
+                    Value::Str(s) => eprintln!("{k:<10} {s}"),
+                }
+            }
+        }
+        let rgba = render_generator(g.id, &seed, w, h, &cli.params)?;
+        return save(&cli, format!("{}-{}.png", g.id, util::slug(&seed)), w, h, &rgba);
+    }
+    if !cli.params.is_empty() {
+        return Err("-p/--param only applies to a generator; pick one with -g (see swirlseed --list)".into());
+    }
+
+    let (w, h) = gen_cli::resolve_size(cli.size, None);
     let params = create_pattern(&seed);
 
     if cli.info {
@@ -243,24 +323,8 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
         eprintln!("palette  {}", palette_hex(&params).join(" "));
     }
 
-    let to_stdout = cli.output.as_deref() == Some("-");
-    if to_stdout && io::stdout().is_terminal() {
-        return Err("refusing to write a PNG to a terminal; redirect stdout or pass -o FILE".into());
-    }
-
     let rgba = render_pattern(&params, w, h, &options);
-
-    if to_stdout {
-        write_png(BufWriter::new(io::stdout().lock()), w, h, &rgba)?;
-    } else {
-        let path = cli
-            .output
-            .clone()
-            .unwrap_or_else(|| format!("{}.png", util::slug(&seed)));
-        write_png(BufWriter::new(File::create(&path)?), w, h, &rgba)?;
-        eprintln!("wrote {path} ({w}x{h})");
-    }
-    Ok(())
+    save(&cli, format!("{}.png", util::slug(&seed)), w, h, &rgba)
 }
 
 fn main() -> ExitCode {
